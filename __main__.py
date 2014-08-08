@@ -1,3 +1,4 @@
+import atexit
 import os
 import sys
 import subprocess
@@ -23,6 +24,31 @@ def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra):
 
 def postprocess_matches(matched_ions_file):
     return postprocess.main(matched_ions_file)
+
+
+def prepare_model_file(postprocessed_ions_file, rscript_path="Rscript", out=None):
+    # FILE - Location of library, for non-bundled installed execution
+    # STANDARD - The gold standard file to build a model from
+    # TEST - The file to test and classify
+    # OUT - Final path to the result file
+    # RSCRIPT - Path to the Rscript executable
+    cmd_args = dict(FILE=windows_to_unix_path(os.path.dirname(os.path.abspath(__file__))),
+                    MODEL=windows_to_unix_path(postprocessed_ions_file),
+                    OUT="",
+                    RSCRIPT=rscript_path)
+    if(out is not None):
+        cmd_args["OUT"] = "-o %s" % out
+    cmd_str = """{RSCRIPT} --vanilla "{FILE}"/R/prepare_model.R -t "{MODEL}" {OUT}""".format(**cmd_args)
+    cmd = subprocess.Popen(cmd_str,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Script writes result file to STDOUT
+    stdout, stderr = cmd.communicate()
+    # for stream in [stdout, stderr]:
+    #     print(stream[:100])
+    if cmd.returncode != 0:
+        raise RscriptException(stderr)
+    else:
+        return stdout.split("\n")[-1]
 
 
 def classify_data_by_gold_standard(postprocessed_ions_file, gold_standard_file, rscript_path="Rscript", out=None):
@@ -59,19 +85,42 @@ class RscriptException(Exception):
     pass
 
 
+def clean_up_files(*files):
+    for f in files:
+        os.remove(f)
+
+intermediary_files = []
+#atexit.register(lambda: clean_up_files(*intermediary_files))
+
+
 def main(ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file, rscript_path="Rscript", gold_standard_file=None, out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(ms1_results_file, glycosylation_sites_file)
-    print(theoretical_ion_space_file)
+    # print(theoretical_ion_space_file)
+    intermediary_files.append(theoretical_ion_space_file)
+
     matched_ions_file = match_deconvoluted_ions(theoretical_ion_space_file, deconvoluted_spectra_file)
-    print(matched_ions_file)
+    # print(matched_ions_file)
+    intermediary_files.append(matched_ions_file)
+
     postprocessed_ions_file = postprocess_matches(matched_ions_file)
-    print(postprocessed_ions_file)
-    try:
-        classification_results_file = classify_data_by_gold_standard(postprocessed_ions_file, gold_standard_file, rscript_path, out)
-    except RscriptException, e:
-        print(e)
-        exit(-25)
-    print(classification_results_file)
+    # print(postprocessed_ions_file)
+    intermediary_files.append(postprocessed_ions_file)
+
+    # If there is no gold standard, then we generate a model that awaits labeling
+    if(gold_standard_file is None):
+        try:
+            model_file = prepare_model_file(postprocessed_ions_file, rscript_path, out)
+            print(model_file)
+        except RscriptException, e:
+            print(e)
+            exit(-25)
+    else:
+        try:
+            classification_results_file = classify_data_by_gold_standard(postprocessed_ions_file, gold_standard_file, rscript_path, out)
+        except RscriptException, e:
+            print(e)
+            exit(-25)
+        print(classification_results_file)
     exit(0)
 
 if __name__ == '__main__':
@@ -81,7 +130,7 @@ if __name__ == '__main__':
     app.add_argument("--ms1-results-file", action="store")
     app.add_argument("--glycosylation-sites-file", action="store")
     app.add_argument("--deconvoluted-spectra-file", action="store")
-    app.add_argument("--gold-standard-file", action="store", default=None)
+    app.add_argument("--gold-standard-file", action="store", default=None, required=False)
     app.add_argument("--out", action="store", default=None)
     args = app.parse_args()
     main(**args.__dict__)

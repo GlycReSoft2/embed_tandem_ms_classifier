@@ -104,16 +104,16 @@ def main(matched_ions_file, output_file=None):
                                "b_ion_coverage": json.dumps(all_b_found),
                                "y_ion_coverage": json.dumps(all_y_found),
                                "Stub_ions": json.dumps(stubs),
-                               "%b_ion_with_HexNAc_coverage": percent_b_HexNAc,
-                               "%y_ion_with_HexNAc_coverage": percent_y_HexNAc,
-                               "%percent_b-ion_coverage": percent_b,
-                               "%percent_y-ion_coverage": percent_y,
+                               "percent_b_ion_with_HexNAc_coverage": percent_b_HexNAc,
+                               "percent_y_ion_with_HexNAc_coverage": percent_y_HexNAc,
+                               "percent_b_ion_coverage": percent_b,
+                               "percent_y_ion_coverage": percent_y,
                                "#_of_stubs_found": stubs_found
                                })
 
     keys = [
         "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites", "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions", "bare_b_ions", "total_b_ions_possible", "bare_y_ions",
-        "total_y_ions_possible", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage", "Stub_ions", "%b_ion_with_HexNAc_coverage", "%y_ion_with_HexNAc_coverage", "%percent_b-ion_coverage", "%percent_y-ion_coverage", "#_of_stubs_found"]
+        "total_y_ions_possible", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage", "Stub_ions", "percent_b_ion_with_HexNAc_coverage", "percent_y_ion_with_HexNAc_coverage", "percent_b_ion_coverage", "percent_y_ion_coverage", "#_of_stubs_found"]
 
     f = open(output_file + ".csv", 'wb')
     dict_writer = csv.DictWriter(f, keys)

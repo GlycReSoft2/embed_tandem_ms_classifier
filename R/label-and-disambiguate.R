@@ -7,7 +7,6 @@ library(stringr)
 
 options(stringsAsFactors=F)
 
-
 selectCoverage <- function(dataSet){
   dataSet$bestCoverage <- ifelse(dataSet$X.percent_b.ion_coverage > dataSet$X.percent_y.ion_coverage,
                                  as.numeric(dataSet$X.percent_b.ion_coverage),
@@ -17,19 +16,20 @@ selectCoverage <- function(dataSet){
 
 decideCoverage <- function(dataSet){
   dataSet <- selectCoverage(dataSet)
-  dataSet$call <- apply(cbind(dataSet$bestCoverage > 0.4, dataSet$numStubs > 0),
-                        1, any)
+  dataSet$call <- apply(cbind(dataSet$meanCoverage > 0.4, dataSet$numStubs > 0, dataSet$percentUncovered < 0.2),
+                        1, all)
   return(dataSet)
 }
 
 shimPercentCalcs <- function(dataSet){
+  print(names(dataSet))
   results <- adply(dataSet, 1, function(row){
     data.frame(
-      X.percent_b.ion_coverage = ifelse(row[, "total_b_ions"] == 0, 0,length(fromJSON(row[, "b_ion_coverage"])) / row[, "total_b_ions"]),
-      X.percent_y.ion_coverage = ifelse(row[, "total_y_ions"] == 0, 0, length(fromJSON(row[, "y_ion_coverage"])) / row[, "total_y_ions"]),
-      X.b_ion_with_HexNAc_coverage = ifelse(row[, "possible_b_ions_HexNAc"] == 0, 0, length(fromJSON(row[, "b_ions_with_HexNAc"])) / row[, "possible_b_ions_HexNAc"]),
-      X.y_ion_with_HexNAc_coverage = ifelse(row[, "possible_y_ions_HexNAc"] == 0, 0, length(fromJSON(row[, "y_ions_with_HexNAc"])) / row[, "possible_y_ions_HexNAc"])
-    )
+         percent_b_ion_coverage = ifelse(!("total_b_ions_possible" %in% names(row)) || (row[, "total_b_ions_possible"] == 0), 0,length(fromJSON(row[, "b_ion_coverage"])) / row[, "total_b_ions"]),
+         percent_y_ion_coverage = ifelse(!("total_y_ions_possible" %in% names(row)) || (row[, "total_y_ions_possible"] == 0), 0, length(fromJSON(row[, "y_ion_coverage"])) / row[, "total_y_ions"]),
+         percent_b_ion_with_HexNAc_coverage = ifelse(!("possible_b_ions_HexNAc" %in% names(row)) || (row[, "possible_b_ions_HexNAc"] == 0), 0, length(fromJSON(row[, "b_ions_with_HexNAc"])) / row[, "possible_b_ions_HexNAc"]),
+         percent_y_ion_with_HexNAc_coverage = ifelse(!("possible_y_ions_HexNAc" %in% names(row)) || (row[, "possible_y_ions_HexNAc"] == 0), 0, length(fromJSON(row[, "y_ions_with_HexNAc"])) / row[, "possible_y_ions_HexNAc"])
+         )
   })
   results
 }
@@ -45,8 +45,8 @@ resolveCall <- function(potentialCalls){
   fields <- c("MS2_Score","numStubs","meanCoverage",
               "percentUncovered","peptideLens",
               "abs_ppm_error",
-              "X.b_ion_with_HexNAc_coverage",
-              "X.y_ion_with_HexNAc_coverage")
+              "percent_b_ion_with_HexNAc_coverage",
+              "percent_y_ion_with_HexNAc_coverage")
 
   mask <- fields %in% colnames(potentialCalls)
   signs <- signs[mask]
@@ -146,7 +146,7 @@ prepareModelHandler <- function(modelFile, includeAnno = F, ...){
 prepareModel <- function(modelFile, readFile = T, call = T, classifierFn = NULL){
   if(readFile){
     rawDataSet <- read.csv(modelFile, stringsAsFactors = F)
-    if(!("X.percent_b.ion_coverage" %in% names(rawDataSet))){
+    if(!("percent_b_ion_coverage" %in% names(rawDataSet))){
       rawDataSet <- shimPercentCalcs(rawDataSet)
     }
   } else {
@@ -174,7 +174,7 @@ prepareModel <- function(modelFile, readFile = T, call = T, classifierFn = NULL)
 prepareAnnotatedModel <- function(modelFile, readFile = T, drop = T){
   if(readFile){
     rawDataSet <- read.csv(modelFile, stringsAsFactors = F)
-    if(!("X.percent_b.ion_coverage" %in% names(rawDataSet))){
+    if(!("percent_b_ion_coverage" %in% names(rawDataSet))){
       rawDataSet <- shimPercentCalcs(rawDataSet)
     }
   } else {
