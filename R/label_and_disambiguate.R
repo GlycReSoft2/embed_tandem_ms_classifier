@@ -8,18 +8,20 @@ library(stringr)
 options(stringsAsFactors=F)
 
 selectCoverage <- function(dataSet){
-  dataSet$bestCoverage <- ifelse(dataSet$X.percent_b.ion_coverage > dataSet$X.percent_y.ion_coverage,
-                                 as.numeric(dataSet$X.percent_b.ion_coverage),
-                                 as.numeric(dataSet$X.percent_y.ion_coverage))
+  dataSet$bestCoverage <- ifelse(dataSet$percent_b_ion_coverage > dataSet$percent_y_ion_coverage,
+                                 as.numeric(dataSet$percent_b_ion_coverage),
+                                 as.numeric(dataSet$percent_y_ion_coverage))
   return(dataSet)
 }
 
-decideCoverage <- function(dataSet){
+decideCallByFeatures <- function(dataSet){
   dataSet <- selectCoverage(dataSet)
   dataSet$call <- apply(cbind(dataSet$meanCoverage > 0.4, dataSet$numStubs > 0, dataSet$percentUncovered < 0.2),
                         1, all)
   return(dataSet)
 }
+
+decideCoverageByScore <- function(dataSet){}
 
 shimPercentCalcs <- function(dataSet){
   print(names(dataSet))
@@ -123,7 +125,11 @@ numStubs <- function(dataSet, thresholdLength = 0, thresholdPenalty = 1){
 }
 
 labelCall <- function(call){
-  factor(call, labels=c("No", "Yes"), levels = c(F, T))
+  if(class(call) == "logical"){
+    factor(call, labels=c("No", "Yes"), levels = c(F, T))
+  } else if(class(call) == "character"){
+    factor(call, levels=c("No", "Yes"))
+  }
 }
 
 loadDir <- function(dir, includeAnno = F){
@@ -152,8 +158,8 @@ prepareModel <- function(modelFile, readFile = T, call = T, classifierFn = NULL)
   } else {
     rawDataSet <- modelFile
   }
-  rawDataSet$X.y_ion_with_HexNAc_coverage <- as.numeric(rawDataSet$X.y_ion_with_HexNAc_coverage)
-  rawDataSet$X.b_ion_with_HexNAc_coverage <- as.numeric(rawDataSet$X.b_ion_with_HexNAc_coverage)
+  rawDataSet$percent_y_ion_with_HexNAc_coverage <- as.numeric(rawDataSet$percent_y_ion_with_HexNAc_coverage)
+  rawDataSet$percent_b_ion_with_HexNAc_coverage <- as.numeric(rawDataSet$percent_b_ion_with_HexNAc_coverage)
   nOxDataSet <- numOxoniumIons(rawDataSet)
   nOxDataSet$abs_ppm_error <- abs(nOxDataSet$ppm_error)
   nStubsDataSet <- numStubs(nOxDataSet)
@@ -162,7 +168,7 @@ prepareModel <- function(modelFile, readFile = T, call = T, classifierFn = NULL)
     if(!is.null(classifierFn)){
       calledDataSet <- classifierFn(preparedDataSet)
     } else{
-      calledDataSet <- decideCoverage(preparedDataSet)
+      calledDataSet <- decideCallByFeatures(preparedDataSet)
       calledDataSet$call <- labelCall(calledDataSet$call)
     }
     return(calledDataSet)
@@ -181,8 +187,8 @@ prepareAnnotatedModel <- function(modelFile, readFile = T, drop = T){
     rawDataSet <- modelFile
   }
   if(drop){
-    cleanDataSet <- rawDataSet[!apply(cbind(is.na(rawDataSet$`TRUE.FALSE`),
-                                            rawDataSet$`TRUE.FALSE` == ""),1,any) ,]
+    cleanDataSet <- rawDataSet[!apply(cbind(is.na(rawDataSet$call),
+                                            rawDataSet$call == ""),1,any) ,]
   } else {
     cleanDataSet <- rawDataSet
   }
@@ -195,7 +201,7 @@ prepareAnnotatedModel <- function(modelFile, readFile = T, drop = T){
       )
     )
   )
-  preparedDataSet$call <- labelCall(preparedDataSet$`TRUE.FALSE`)
+  preparedDataSet$call <- labelCall(preparedDataSet$call)
   return(preparedDataSet)
 }
 
@@ -208,8 +214,8 @@ prepareAnnotatedModel <- function(modelFile, readFile = T, drop = T){
 #   X.y_ion_with_HexNAc_coverage +  numStubs + peptideLens +
 #   ppm_error + meanCoverage + percentUncovered
 
-complexModelFormula <- call ~ meanCoverage + percentUncovered + abs_ppm_error + X.b_ion_with_HexNAc_coverage +
-  X.y_ion_with_HexNAc_coverage + numStubs + peptideLens
+complexModelFormula <- call ~ meanCoverage + percentUncovered + abs_ppm_error + percent_b_ion_with_HexNAc_coverage +
+  percent_y_ion_with_HexNAc_coverage + numStubs + peptideLens
 
 # complexModelFormulaWithInteractions <- call ~ X.percent_b.ion_coverage *
 #   X.percent_y.ion_coverage * X.b_ion_with_HexNAc_coverage *
@@ -217,7 +223,7 @@ complexModelFormula <- call ~ meanCoverage + percentUncovered + abs_ppm_error + 
 #   ppm_error * meanCoverage * percentUncovered
 
 complexModelFormulaWithInteractions <- call ~ meanCoverage * percentUncovered *
-  X.b_ion_with_HexNAc_coverage * X.y_ion_with_HexNAc_coverage *
+  percent_b_ion_with_HexNAc_coverage * percent_y_ion_with_HexNAc_coverage *
   numStubs * peptideLens * ppm_error
 
 #' Fits a model on the dataset

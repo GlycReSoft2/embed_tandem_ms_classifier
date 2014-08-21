@@ -12,7 +12,7 @@ def score(matched_ions_file, output_file=None):
     :param output_file: Path to file to write results to. Defaults to `matched_ions_file` + "_score"
     '''
     if output_file is None:
-        output_file = matched_ions_file + "_score"
+        output_file = matched_ions_file + ".score"
     results = csv.DictReader(open(matched_ions_file))
     scored_results = []
 
@@ -94,9 +94,9 @@ def score(matched_ions_file, output_file=None):
     dict_writer.writerows(scored_results)
     f.close()
 
-    f = open(output_file + '.json', 'wb')
-    json.dump(scored_results, f)
-    f.close()
+#    f = open(output_file + '.json', 'wb')
+#    json.dump(scored_results, f)
+#    f.close()
 
     # return scored_results
     return output_file + ".csv"

@@ -3,6 +3,7 @@ library("optparse")
 
 option_list <- list(
     make_option(c("-g","--gold-standard"), action = "store", help = "Gold Standard Dataset to train the model on"),
+    make_option(c("-m", "--method"), action = "store", default = "default", help = "Chooses the model method to use for classification"),
     make_option(c("-t","--target"), action = "store", help = "Target Dataset to classify"),
     make_option(c("-o", "--output"), action = "store", help = "Name of output file (defaults to <target>-scored.csv")
 )
@@ -22,7 +23,7 @@ interpolate_path <- function(){
 
 base_path <- interpolate_path()
 
-suppressPackageStartupMessages(source(file.path(base_path, "label-and-disambiguate.R")))
+suppressPackageStartupMessages(source(file.path(base_path, "label_and_disambiguate.R")))
 
 if(!('target' %in% names(args)) || !("gold-standard" %in% names(args))){
     stop("Must provide both gold-standard and target datasets")
@@ -34,7 +35,7 @@ target <- prepareModel(args[["target"]])
 
 model_fit <- fitModel(gold_standard)
 
-target$MS2_Score <- predict(model_fit, target, "prob")
+target$MS2_Score <- predict(model_fit, target, "prob")[,"Yes"]
 
 
 labeled_target <- labelAmbiguity(target)

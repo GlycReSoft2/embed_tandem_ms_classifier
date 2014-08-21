@@ -2,15 +2,17 @@
 from composition import Composition
 
 mod_table = {
-    'Carbamidomethyl' : ['Cys', 57.0214],
-    'Deamidated' : ['Asn', 0.9840099999999978],
-    'HexNAc' : ['Asn', 203.07937],
+    'Carbamidomethyl': ['Cys', 57.0214],
+    'Deamidated': ['Asn', 0.9840099999999978],
+    'HexNAc': ['Asn', 203.07937],
     'pyroGlu': ['Gln', -17.02655]}
 
+
 class Modification:
+
     """description of class"""
 
-    def __init__(self, mod_name, mod_pos = -1, mod_num = 1, mass = 0.0, target=''):
+    def __init__(self, mod_name, mod_pos=-1, mod_num=1, mass=0.0, target=''):
         self.name = mod_name
         self.position = mod_pos
         self.number = mod_num

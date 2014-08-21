@@ -76,7 +76,7 @@ class TheoreticalIonFragment(object):
 
 def main(result_file, site_file, output_file=None):
     if output_file is None:
-        output_file = os.path.splitext(result_file)[0] + '_theoretical_ions'
+        output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
 
     #print("Reading %s" % result_file)
     compo_dict = csv.DictReader(open(result_file, "r"), delimiter=",")

@@ -2,6 +2,7 @@ import ast
 import csv
 import json
 #import math
+from os.path import splitext
 import re
 
 
@@ -12,7 +13,7 @@ def main(matched_ions_file, output_file=None):
     :param output_file: Path to file to write results to. Defaults to `matched_ions_file` + ".processed"
     '''
     if output_file is None:
-        output_file = matched_ions_file + ".processed"
+        output_file = splitext(splitext(matched_ions_file)[0])[0] + ".processed"
     results = csv.DictReader(open(matched_ions_file))
     scored_results = []
 
@@ -108,12 +109,15 @@ def main(matched_ions_file, output_file=None):
                                "percent_y_ion_with_HexNAc_coverage": percent_y_HexNAc,
                                "percent_b_ion_coverage": percent_b,
                                "percent_y_ion_coverage": percent_y,
-                               "#_of_stubs_found": stubs_found
+                               "#_of_stubs_found": stubs_found,
                                })
 
     keys = [
-        "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites", "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions", "bare_b_ions", "total_b_ions_possible", "bare_y_ions",
-        "total_y_ions_possible", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage", "Stub_ions", "percent_b_ion_with_HexNAc_coverage", "percent_y_ion_with_HexNAc_coverage", "percent_b_ion_coverage", "percent_y_ion_coverage", "#_of_stubs_found"]
+        "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites",
+        "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions", "bare_b_ions", "total_b_ions_possible", "bare_y_ions",
+        "total_y_ions_possible", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage", "Stub_ions",
+        "percent_b_ion_with_HexNAc_coverage", "percent_y_ion_with_HexNAc_coverage", "percent_b_ion_coverage", "percent_y_ion_coverage",
+        "#_of_stubs_found"]
 
     f = open(output_file + ".csv", 'wb')
     dict_writer = csv.DictWriter(f, keys)
@@ -126,4 +130,4 @@ def main(matched_ions_file, output_file=None):
 
 if __name__ == '__main__':
     import sys
-    score(sys.argv[1])
+    main(sys.argv[1])

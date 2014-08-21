@@ -2,10 +2,10 @@
 
 import ast
 import csv
-import json
+#import json
 import math
-import os
-
+#import os
+from os.path import splitext
 import yaml
 
 Carbon = 12.00000
@@ -25,8 +25,8 @@ Electron = 0.000549
 Water = 18.0105647000
 Proton = 1.007276035
 
-ms1_tolerance = 0.00001
-ms2_tolerance = 0.00002
+ms1_tolerance_default = 0.00001
+ms2_tolerance_default = 0.00002
 
 
 def Mergedicts(list):
@@ -214,15 +214,15 @@ def MergeRows(SourceData):
     return MergedList
 
 
-def match_frags(theo_fragment_file, yaml_data, outfile=None):
+def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_default, ms2_tolerance=ms2_tolerance_default, outfile=None):
     '''
     :param theo_fragment_file: path to file containing all theoretical peptides
     :param yaml_data: path to yaml file from earlier MS1 analysis
-    :param outfile: path to the file to write output to. Defaults to theo_fragment_file + "_match_frags".
+    :param outfile: path to the file to write output to. Defaults to theo_fragment_file + ".match_frags".
     '''
-
+    print("ms1_tolerance %f, ms2_tolerance %f" % (ms1_tolerance, ms2_tolerance))
     if outfile is None:
-        outfile = os.path.splitext(theo_fragment_file)[0] + '_match_frags'
+        outfile = splitext(splitext(theo_fragment_file)[0])[0] + '.match_frags'
 
     #filename = "Transferrin-ions2.csv"
     f_csv = csv.DictReader(open(theo_fragment_file))
