@@ -4,6 +4,12 @@ import os
 import sys
 import subprocess
 
+# Handles URI Decoding incompatibility with py2K
+try:
+    import urllib2 as url_parser  # python 2
+except ImportError:
+    import urllib.parse as url_parser  # python 3
+
 # Ensure our scripts are imported before any others since we can't depend upon
 # the packaging middleware to handle relative imports, or should we vendorize
 # pip or easy_install?
@@ -113,12 +119,19 @@ intermediary_files = []
 
 def __intermediary_files():
     print(intermediary_files)
+
+
+def uri_decode(uri):
+    return url_parser.unquote(uri)
+
+
 #atexit.register(lambda: clean_up_files(*intermediary_files))
-#atexit.register(__intermediary_files)
+# atexit.register(__intermediary_files)
 
 
 def main(ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
-         ms1_match_tolerance, ms2_match_tolerance, modification_list_file=None,
+         ms1_match_tolerance, ms2_match_tolerance, constant_modification_list=None,
+         variable_modification_list=None,
          method="default", rscript_path="Rscript", gold_standard_file=None, out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(ms1_results_file, glycosylation_sites_file)
     # print(theoretical_ion_space_file)
@@ -164,9 +177,17 @@ if __name__ == '__main__':
     app.add_argument("--gold-standard-file", action="store", default=None, required=False)
     app.add_argument("--ms1-match-tolerance", type=float, action="store", default=match_ions.ms1_tolerance_default, help="Mass Error Tolerance for matching MS1 masses in PPM")
     app.add_argument("--ms2-match-tolerance", type=float, action="store", default=match_ions.ms2_tolerance_default, help="Mass Error Tolerance for matching MS2 masses in PPM")
-    app.add_argument("--modification-list-file", type=str, action="store", default=None, help="Pass the list of modifications to include in the sequence search space")
+    app.add_argument("--constant-modification-list", type=str, action="append", default=None, help="Pass the list of constant modifications to include in the sequence search space")
+    app.add_argument("--variable-modification-list", type=str, action="append", default=None, help="Pass the list of variable modifications to include in the sequence search space")
+
     app.add_argument("--out", action="store", default=None)
     args = app.parse_args().__dict__
+    if args['constant_modification_list'] is not None:
+        args['constant_modification_list'] = map(uri_decode, args['constant_modification_list'])
+
+    if args['variable_modification_list'] is not None:
+        args['variable_modification_list'] = map(uri_decode, args['variable_modification_list'])
+
     param_file = args.pop("parameter_file", None)
     if param_file is not None:
         params = load_parameters(param_file)
