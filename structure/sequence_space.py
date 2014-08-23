@@ -25,7 +25,7 @@ class SequenceSpace:
         self.modifications = mod_list
 
     def getTheoreticalSequence(self, num_sites):
-        """ 
+        """
             Get theoretical sequence tailored for fragmenation
             max_sites -- the number of maximum glycolsylation sites.
             -1 means unlimited.
@@ -39,7 +39,7 @@ class SequenceSpace:
         #exploreSequence(mod_set, 0, raw_seq, occupied_sites, seq_space)
 
         n = len(self.modifications)
-        
+
         ix_bound = []
 
         ## Get the candidate sites for all modification
@@ -89,7 +89,7 @@ class SequenceSpace:
                     raw_seq.addModification(mod_site, self.modifications[x].name)
 
             ## Get available glycosylation sites.
-            
+
             #upper_limit = (min(max_sites, len(glyco_sites)) if max_sites > 0 else len(glyco_sites))
 
             #for m in range(1, upper_limit+1):
