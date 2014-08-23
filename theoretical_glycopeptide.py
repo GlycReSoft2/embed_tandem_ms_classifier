@@ -63,6 +63,7 @@ class TheoreticalIonFragment(object):
         for i in items:
             mod = Modification(i[1], -1, int(i[0]))
             mod_list.append(mod)
+            print(mod, i)
         return mod_list
 
     @classmethod
