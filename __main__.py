@@ -125,7 +125,7 @@ def uri_decode(uri):
     return url_parser.unquote(uri)
 
 
-#atexit.register(lambda: clean_up_files(*intermediary_files))
+atexit.register(lambda: clean_up_files(*intermediary_files))
 # atexit.register(__intermediary_files)
 
 
