@@ -35,6 +35,13 @@ class Sequence:
 
         self.mass += Composition("H2O").mass
 
+    def __repr__(self):
+        rep = "{seq}[{mass}]".format(**self.__dict__)
+        return rep
+
+    def __len__(self):
+        return self.length
+
     def addMass(self, pos, mass):
         """
                 This function will direcly modify the mass of the residue instead of appending the modificaion.
@@ -118,11 +125,11 @@ class Sequence:
         # return fragment_series
 
     def addModification(self, pos, mod_type):
-        if pos == -1 | pos >= len(self.seq):
+        if (pos == -1) or (pos >= len(self.seq)):
             warnings.warn("Invalid modification!")
             return
 
-        mod = Modification(mod_type, pos)
+        mod = Modification(rule=mod_type, mod_pos=pos)
         self.seq[pos][1].append(mod)
         # self.addMass(pos,mod.mass)
         self.mass += mod.mass

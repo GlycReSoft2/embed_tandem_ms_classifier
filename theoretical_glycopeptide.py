@@ -8,7 +8,6 @@
 # Arg 2 -- list specifying the candidate glycosylation sites.
 # Example: python HH_glycopeptide.py test_data.csv sample_glycosites.txt > report.txt
 
-
 import csv
 #import json
 import os
@@ -18,8 +17,8 @@ import re
 from collections import defaultdict
 
 #from structure.residue import Residue
-from structure.modification import Modification
-from structure.sequencespace import SequenceSpace
+from structure.modification import Modification, RestrictedModificationTable
+from structure.sequence_space import SequenceSpace
 #from structure.sequence import Sequence
 from structure.stub_glycopeptides import stubs
 #from structure.fragment import Fragment
@@ -57,13 +56,12 @@ class TheoreticalIonFragment(object):
         self.y_ions_with_hexnac = data_dict[KEYS[18]]
 
     @classmethod
-    def get_peptide_modifications(cls, data):
+    def get_peptide_modifications(cls, data, modification_table):
         items = cls.mod_pattern.findall(data)
         mod_list = []
         for i in items:
-            mod = Modification(i[1], -1, int(i[0]))
+            mod = modification_table.get_modification(i[1], -1, int(i[0]))
             mod_list.append(mod)
-            print(mod, i)
         return mod_list
 
     @classmethod
@@ -72,12 +70,15 @@ class TheoreticalIonFragment(object):
         for g in glycan_identities:
             glycan_compo[g] = int(row[''.join(['G:', g])])
         seq_space = SequenceSpace(seq_str, glycan_compo, glycan_sites, mod_list)
+        #print(seq_space)
         return seq_space
 
 
-def main(result_file, site_file, output_file=None):
+def main(result_file, site_file, constant_modification_list, variable_modification_list, output_file=None):
     if output_file is None:
         output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
+
+    modification_table = RestrictedModificationTable.bootstrap(constant_modification_list, variable_modification_list)
 
     #print("Reading %s" % result_file)
     compo_dict = csv.DictReader(open(result_file, "r"), delimiter=",")
@@ -95,7 +96,7 @@ def main(result_file, site_file, output_file=None):
     # Each row as a dict.
     #print("Creating set of all theoretical glycopeptides")
     for i, row in enumerate(compo_dict):
-        #if (i % 1000) == 0:
+        # if (i % 1000) == 0:
             #print("%d total" % i)
         # For each row, read the information of glycan compound, peptide sequence,
         # ofGlycanAttachmentToPeptide, PeptideModification
@@ -114,7 +115,7 @@ def main(result_file, site_file, output_file=None):
             continue
 
         # Compute the set of modifications that can occur.
-        mod_list = TheoreticalIonFragment.get_peptide_modifications(row['PeptideModification'])
+        mod_list = TheoreticalIonFragment.get_peptide_modifications(row['PeptideModification'], modification_table)
 
         # Get the start and end positions of fragment relative to the
         start_pos = int(row['StartAA'])
@@ -129,9 +130,7 @@ def main(result_file, site_file, output_file=None):
         glycan_sites = [x - start_pos for x in glycan_sites]
 
         ss = TheoreticalIonFragment.get_search_space(row, glycan_identity, glycan_sites, seq_str, mod_list)
-
-        seq_list = ss.getTheoreticalSequence(num_sites)
-
+        seq_list = ss.get_theoretical_sequence(num_sites)
         for s in seq_list:
             #print(seq_str, '\t', row['Compound Key'], mod_str, '\n', s.getSequence())
             seq_mod = s.getSequence()
@@ -184,5 +183,24 @@ if __name__ == '__main__':
     parser.add_argument("-f", "--fragment-file", type=str, help="The csv file produced by Glycresoft, describing a peptide")
     parser.add_argument("-s", "--site-file", type=str, help="A file listing each position along the peptide where ")
     parser.add_argument("-o", "--output-file", type=str, default=None, help="The name of the file to output results to. Defaults to `fragment-file`_theoretical_ions")
+    parser.add_argument("--constant-modification-list", type=str, action="append", default=None, help="Pass the list of constant modifications to include in the sequence search space")
+    parser.add_argument("--variable-modification-list", type=str, action="append", default=None, help="Pass the list of variable modifications to include in the sequence search space")
     args = parser.parse_args()
-    main(result_file=args.fragment_file, site_file=args.site_file, output_file=args.output_file)
+
+    import traceback
+    import sys
+    import code
+
+    try:
+        main(result_file=args.fragment_file, site_file=args.site_file,
+             constant_modification_list=args.constant_modification_list,
+             variable_modification_list=args.variable_modification_list,
+             output_file=args.output_file)
+    except:
+        extype, value, tb = sys.exc_info()
+        traceback.print_exc()
+        last_frame = lambda tb=tb: last_frame(tb.tb_next) if tb.tb_next else tb
+        frame = last_frame().tb_frame
+        ns = dict(frame.f_globals)
+        ns.update(frame.f_locals)
+        code.interact(local=ns)

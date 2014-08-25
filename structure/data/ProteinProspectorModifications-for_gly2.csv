@@ -1,4 +1,4 @@
-monoisotopic_mass,specificity_type,modification_name,amino_acid_specificity,Protein prospector names
+monoisotopic_mass,specificity_type,modification_name,amino_acid_specificity,protein_prospector_name
 42.010565,2,Acetyl,K,Acetyl (K)
 42.010565,5,Acetyl,N-term,Acetyl (N-term)
 42.010565,3,Acetyl,N-term,Acetyl (N-term)
