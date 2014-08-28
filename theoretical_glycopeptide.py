@@ -6,7 +6,8 @@
 # Input:
 # Arg 1 -- csv file containing glycopeptide composition
 # Arg 2 -- list specifying the candidate glycosylation sites.
-# Example: python HH_glycopeptide.py test_data.csv sample_glycosites.txt > report.txt
+# Example: python HH_glycopeptide.py test_data.csv sample_glycosites.txt >
+# report.txt
 
 import csv
 #import json
@@ -17,15 +18,17 @@ import re
 from collections import defaultdict
 
 #from structure.residue import Residue
-from structure.modification import Modification, RestrictedModificationTable
+from structure.modification import RestrictedModificationTable
+from structure.modification import ModificationTable
 from structure.sequence_space import SequenceSpace
 #from structure.sequence import Sequence
 from structure.stub_glycopeptides import stubs
 #from structure.fragment import Fragment
 
-KEYS = ["MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol",
-        "glyco_sites", "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
-        "pep_stub_ions", "bare_b_ions", "bare_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc"]
+KEYS = [
+    "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol",
+    "glyco_sites", "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
+    "pep_stub_ions", "bare_b_ions", "bare_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc"]
 
 
 class TheoreticalIonFragment(object):
@@ -69,16 +72,21 @@ class TheoreticalIonFragment(object):
         glycan_compo = {}
         for g in glycan_identities:
             glycan_compo[g] = int(row[''.join(['G:', g])])
-        seq_space = SequenceSpace(seq_str, glycan_compo, glycan_sites, mod_list)
-        #print(seq_space)
+        seq_space = SequenceSpace(
+            seq_str, glycan_compo, glycan_sites, mod_list)
+        # print(seq_space)
         return seq_space
 
 
-def main(result_file, site_file, constant_modification_list, variable_modification_list, output_file=None):
+def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None, output_file=None):
     if output_file is None:
         output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
 
-    modification_table = RestrictedModificationTable.bootstrap(constant_modification_list, variable_modification_list)
+    modification_table = RestrictedModificationTable.bootstrap(
+        constant_modification_list, variable_modification_list)
+
+    if constant_modification_list is None and variable_modification_list is None:
+        modification_table = ModificationTable.bootstrap()
 
     #print("Reading %s" % result_file)
     compo_dict = csv.DictReader(open(result_file, "r"), delimiter=",")
@@ -115,12 +123,14 @@ def main(result_file, site_file, constant_modification_list, variable_modificati
             continue
 
         # Compute the set of modifications that can occur.
-        mod_list = TheoreticalIonFragment.get_peptide_modifications(row['PeptideModification'], modification_table)
+        mod_list = TheoreticalIonFragment.get_peptide_modifications(
+            row['PeptideModification'], modification_table)
 
         # Get the start and end positions of fragment relative to the
         start_pos = int(row['StartAA'])
         end_pos = int(row['EndAA'])
-        glycan_sites = set(site_list).intersection(range(start_pos, end_pos + 1))
+        glycan_sites = set(site_list).intersection(
+            range(start_pos, end_pos + 1))
 
         # No recorded sites, skip this component.
         if len(glycan_sites) == 0:
@@ -129,7 +139,8 @@ def main(result_file, site_file, constant_modification_list, variable_modificati
         # Adjust the glycan_sites to relative position
         glycan_sites = [x - start_pos for x in glycan_sites]
 
-        ss = TheoreticalIonFragment.get_search_space(row, glycan_identity, glycan_sites, seq_str, mod_list)
+        ss = TheoreticalIonFragment.get_search_space(
+            row, glycan_identity, glycan_sites, seq_str, mod_list)
         seq_list = ss.get_theoretical_sequence(num_sites)
         for s in seq_list:
             #print(seq_str, '\t', row['Compound Key'], mod_str, '\n', s.getSequence())
@@ -141,6 +152,10 @@ def main(result_file, site_file, constant_modification_list, variable_modificati
             for b in b_type:
                 for fm in b:
                     key = fm.getFragmentName()
+                    if key == "B1" or re.search(r'B1\+', key):
+                        # B1 Ions aren't actually seen in reality, but are an artefact of the generation process
+                        # so do not include them in the output
+                        continue
                     mass = fm.getMass()
                     if "HexNAc" in key:
                         b_ions_HexNAc.append({"key": key, "mass": mass})
@@ -163,11 +178,12 @@ def main(result_file, site_file, constant_modification_list, variable_modificati
             stub_ions = pep_stubs.getStubs()
             oxonium_ions = pep_stubs.getOxoniums()
 
-            fragment_info.append({"MS1_Score": score, "Obs_Mass": precur_mass, "Calc_mass": theo_mass, "ppm_error": mass_error,
-                                  "Peptide": seq_str, "Peptide_mod": pep_mod, "Glycan": glycan_comp, "vol": volume, "glyco_sites": num_sites,
-                                  "startAA": start_pos, "endAA": end_pos, "Seq_with_mod": seq_mod, "Glycopeptide_identifier": seq_mod + glycan_comp,
-                                  "Oxonium_ions": oxonium_ions, "pep_stub_ions": stub_ions, "bare_b_ions": b_ions, "bare_y_ions": y_ions,
-                                  "b_ions_with_HexNAc": b_ions_HexNAc, "y_ions_with_HexNAc": y_ions_HexNAc})
+            fragment_info.append(
+                {"MS1_Score": score, "Obs_Mass": precur_mass, "Calc_mass": theo_mass, "ppm_error": mass_error,
+                 "Peptide": seq_str, "Peptide_mod": pep_mod, "Glycan": glycan_comp, "vol": volume, "glyco_sites": num_sites,
+                 "startAA": start_pos, "endAA": end_pos, "Seq_with_mod": seq_mod, "Glycopeptide_identifier": seq_mod + glycan_comp,
+                 "Oxonium_ions": oxonium_ions, "pep_stub_ions": stub_ions, "bare_b_ions": b_ions, "bare_y_ions": y_ions,
+                 "b_ions_with_HexNAc": b_ions_HexNAc, "y_ions_with_HexNAc": y_ions_HexNAc})
 
     fh = open(output_file + '.csv', 'wb')
     dict_writer = csv.DictWriter(fh, KEYS)
@@ -179,28 +195,23 @@ def main(result_file, site_file, constant_modification_list, variable_modificati
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description="Generate all theoretical ions from input peptides and possible glycosylation sites")
-    parser.add_argument("-f", "--fragment-file", type=str, help="The csv file produced by Glycresoft, describing a peptide")
-    parser.add_argument("-s", "--site-file", type=str, help="A file listing each position along the peptide where ")
-    parser.add_argument("-o", "--output-file", type=str, default=None, help="The name of the file to output results to. Defaults to `fragment-file`_theoretical_ions")
-    parser.add_argument("--constant-modification-list", type=str, action="append", default=None, help="Pass the list of constant modifications to include in the sequence search space")
-    parser.add_argument("--variable-modification-list", type=str, action="append", default=None, help="Pass the list of variable modifications to include in the sequence search space")
+    parser = argparse.ArgumentParser(
+        description="Generate all theoretical ions from input peptides and possible glycosylation sites")
+    parser.add_argument("-f", "--fragment-file", type=str,
+                        help="The csv file produced by Glycresoft, describing a peptide")
+    parser.add_argument("-s", "--site-file", type=str,
+                        help="A file listing each position along the peptide where ")
+    parser.add_argument("-o", "--output-file", type=str, default=None,
+                        help="The name of the file to output results to. Defaults to `fragment-file`_theoretical_ions")
+    parser.add_argument(
+        "--constant-modification-list", type=str, action="append", default=None,
+        help="Pass the list of constant modifications to include in the sequence search space")
+    parser.add_argument(
+        "--variable-modification-list", type=str, action="append", default=None,
+        help="Pass the list of variable modifications to include in the sequence search space")
     args = parser.parse_args()
 
-    import traceback
-    import sys
-    import code
-
-    try:
-        main(result_file=args.fragment_file, site_file=args.site_file,
-             constant_modification_list=args.constant_modification_list,
-             variable_modification_list=args.variable_modification_list,
-             output_file=args.output_file)
-    except:
-        extype, value, tb = sys.exc_info()
-        traceback.print_exc()
-        last_frame = lambda tb=tb: last_frame(tb.tb_next) if tb.tb_next else tb
-        frame = last_frame().tb_frame
-        ns = dict(frame.f_globals)
-        ns.update(frame.f_locals)
-        code.interact(local=ns)
+    main(result_file=args.fragment_file, site_file=args.site_file,
+         constant_modification_list=args.constant_modification_list,
+         variable_modification_list=args.variable_modification_list,
+         output_file=args.output_file)

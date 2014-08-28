@@ -205,6 +205,18 @@ prepareAnnotatedModel <- function(modelFile, readFile = T, drop = T){
   return(preparedDataSet)
 }
 
+prepareResultsRepresentation <- function(resultsFile){
+  data <- read.csv(resultsFile)
+  data$Stub_ions <- lapply(data$Stub_ions, fromJSON)
+  data$Oxonium_ions <- lapply(data$Oxonium_ions, fromJSON)
+  data$b_ion_coverage <- lapply(data$b_ion_coverage, fromJSON)
+  data$y_ion_coverage <- lapply(data$y_ion_coverage, fromJSON)
+  data$b_ions_with_HexNAc <- lapply(data$b_ions_with_HexNAc, fromJSON)
+  data$y_ions_with_HexNAc <- lapply(data$y_ions_with_HexNAc, fromJSON)
+  
+  return(data)
+}
+
 # complexModelFormula <- call ~ numOxIons + X.percent_b.ion_coverage +
 #   X.percent_y.ion_coverage + X.b_ion_with_HexNAc_coverage +
 #   X.y_ion_with_HexNAc_coverage +  numStubs + peptideLens
@@ -467,3 +479,56 @@ localizeHexNac <- function(row){
   return(list(B = bIonHexCov, Y = yIonHexCov))
 
 }
+
+
+extractModificationSites <- function(prediction) {
+  modPattern <- "(\\(.+?\\)|\\[.+?\\])"
+  glycopeptide <- prediction$Glycopeptide_identifier
+  transitioned <- gsub( modPattern, "~\\1~", glycopeptide)
+  chunks <- unlist(strsplit(transitioned, '~'))
+  
+  modifications <- list() #Accumulate Modification objects
+  
+  index = prediction$startAA
+  for(chunk in chunks){
+    #print(chunk)
+    firstChar <- substring(chunk,1,1)
+    chunk <- gsub('\\(|\\)', '', chunk)
+    if(firstChar == "("){ # We have a modification
+      mod <- list(label=chunk, position=index, score=prediction$MS2_Score)
+      modifications <- append(modifications, list(mod))
+    }
+    else if(firstChar == '['){
+      # The Glycan composition, skip
+    }
+    else{
+      index <- index + length(chunk)
+    }
+  }  
+  return(modifications)
+}
+
+getFragmentsSurroundingPosition <- function(position, data){
+  groupByPositions <- dlply(data, c("startAA", "endAA"), function(i)i)
+  ranges <- attr(groupByPositions, "split_labels")
+  results <- list()
+  
+  for(i in 1:(nrow(ranges))){
+    pair <- ranges[i, ]
+    if((position >= pair[1]) && (position <= pair[2])){
+      results <- c(results, list(groupByPositions[[i]]))
+    }
+  }
+  return(do.call(rbind, results))
+}
+
+getBestScoreModifications <- function(data){
+  allModifications <- unlist(data$modifications, recursive = F)
+  modificationFrame <- ldply(allModifications, function(i)data.frame(label=i$label, position=i$position, score=i$score))
+  bestScoreByModification <- dlply(modificationFrame, c("label", "position"),function(mods){ mods[which.max(mods$score),] })
+  
+  
+  
+}
+
+

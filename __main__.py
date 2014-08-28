@@ -34,8 +34,9 @@ def load_parameters(param_file):
     return params
 
 
-def generate_theoretical_ion_space(ms1_results_file, sites_file):
-    return theoretical_glycopeptide.main(ms1_results_file, sites_file, None)
+def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications):
+    return theoretical_glycopeptide.main(ms1_results_file, sites_file,
+                                         constant_modifications, variable_modifications, None)
 
 
 def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra, ms1_match_tolerance, ms2_match_tolerance):
@@ -125,15 +126,14 @@ def uri_decode(uri):
     return url_parser.unquote(uri)
 
 
-atexit.register(lambda: clean_up_files(*intermediary_files))
-# atexit.register(__intermediary_files)
-
+#atexit.register(lambda: clean_up_files(*intermediary_files))
 
 def main(ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
          ms1_match_tolerance, ms2_match_tolerance, constant_modification_list=None,
          variable_modification_list=None,
          method="default", rscript_path="Rscript", gold_standard_file=None, out=None):
-    theoretical_ion_space_file = generate_theoretical_ion_space(ms1_results_file, glycosylation_sites_file)
+    theoretical_ion_space_file = generate_theoretical_ion_space(ms1_results_file, glycosylation_sites_file,
+                                                                constant_modification_list, variable_modification_list)
     # print(theoretical_ion_space_file)
     intermediary_files.append(theoretical_ion_space_file)
 
