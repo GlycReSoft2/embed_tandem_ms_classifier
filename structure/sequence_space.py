@@ -46,7 +46,7 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
                 valid_sites = mod.find_valid_sites(self.seq)
                 all_combinations = [position for position in itertools.combinations(valid_sites, mod.number)]
                 if(len(all_combinations) == 0):
-                    raise Exception("No Valid Sites Found: %r %r in\n %r" % (mod, valid_sites, self.seq))
+                    raise NoSitesFoundException("No Valid Sites Found: %r %r in\n %r" % (mod, valid_sites, self.seq))
                 modification_index_bound.append(all_combinations)
 
         return modification_index_bound
@@ -62,10 +62,10 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
             if num_modifications != 0:
                 #print("num_modifications is not 0")
                 for ind in reversed(range(num_modifications)):
-                    #print(modification_indices)
+                    # print(modification_indices)
                     #print(modification_indices[ind], len(modification_sites[ind]))
                     if(modification_indices[ind] != len(modification_sites[ind])):
-                        #print("Breaking")
+                        # print("Breaking")
                         break
                     else:
                         modification_indices[ind] = 0
@@ -73,7 +73,7 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
                             modification_indices[ind - 1] += 1
                 else:
                     #print("returning 1")
-                    #print(seq_space)
+                    # print(seq_space)
                     return seq_space
 
                 combination_index_sites = [modification_sites[site][modification_indices[site]] for site in range(num_modifications)]
@@ -81,16 +81,13 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
             else:
                 combination_index_sites = []
 
-
             common_sites = set(*combination_index_sites)
             glycosylation_sites = set(self.candidate_sites).difference(common_sites)
 
-
-            #print("Indices",modification_indices)
-            #print("Bounds",modification_sites)
-            #print("Sites",combination_index_sites)
-
-            #print("Configuration: ", len(common_sites), sum(map(len, combination_index_sites)),
+            # print("Indices",modification_indices)
+            # print("Bounds",modification_sites)
+            # print("Sites",combination_index_sites)
+            # print("Configuration: ", len(common_sites), sum(map(len, combination_index_sites)),
             #  num_sites,  len(glycosylation_sites))
             if(len(common_sites) != sum(map(len, combination_index_sites)) or
                (num_sites > len(glycosylation_sites))):  # Invalid Configuration
@@ -115,15 +112,13 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
                     gly_mod = Modification(ModificationTable.other_modifications["HexNAc"], site, 1)
                     temp_seq.appendModification(gly_mod)
                 seq_space.append(temp_seq)
-                #print(seq_space)
-
+                # print(seq_space)
 
             if num_modifications == 0:
                 #print("returning 2")
                 return seq_space
 
             modification_indices[-1] += 1
-
 
     def get_theoretical_sequence(self, num_sites):
         modification_index_bound = self.get_modification_sites()
@@ -159,7 +154,7 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
                 temp_list = [ix for ix in itertools.combinations(ix_list, mod.number)]
                 ix_bound.append(temp_list)
             else:
-                raise Exception('Unqualified modification!')
+                raise UnqualifiedModifierException('Unqualified modification!')
 
         # Initialize the choice index for each modification type.
         indices = [0] * n
@@ -167,19 +162,19 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
         while True:
             if n != 0:
                 #print("n is not 0")
-                for i in reversed(range(n)): # i is dumped into the outer scope and referenced later
+                for i in reversed(range(n)):  # i is dumped into the outer scope and referenced later
                     # If not achiving the last choice of current index
-                    #print(indices)
+                    # print(indices)
                     #print(indices[i], len(ix_bound[i]))
                     if indices[i] != len(ix_bound[i]):  # Within boundary, just out of the loop
-                        #print("Breaking")
+                        # print("Breaking")
                         break
                     else:  # Out of boundary, reset the index.
                         indices[i] = 0
                         if i > 0:
                             indices[i - 1] += 1
                 else:
-                    #print(seq_space)
+                    # print(seq_space)
                     return seq_space
 
             # Check if current indecies are qualifed.
@@ -187,9 +182,9 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
             else:
                 ix_sites = []
 
-            #print("Indices",indices)
-            #print("Bounds",ix_bound)
-            #print("Sites",ix_sites)
+            # print("Indices",indices)
+            # print("Bounds",ix_bound)
+            # print("Sites",ix_sites)
             common_sites = set().union(*ix_sites)
             glyco_sites = set(self.candidate_sites).difference(common_sites)
             #glyco_num = glyco_compo['HexNAc']
@@ -220,7 +215,7 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
                     gly_mod = Modification(ModificationTable.other_modifications["HexNAc"], site, 1)
                     temp_seq.appendModification(gly_mod)
                 seq_space.append(temp_seq)
-                #print(seq_space)
+                # print(seq_space)
 
             if n == 0:
                 #print("returning 2")
@@ -228,3 +223,11 @@ modifications:{modifications}""".format(seq2=self.seq.getSequence(), **self.__di
 
             # Only increase the last index.
             indices[-1] += 1
+
+
+class NoSitesFoundException(Exception):
+    pass
+
+
+class UnqualifiedModifierException(Exception):
+    pass

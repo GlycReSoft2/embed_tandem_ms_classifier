@@ -14,22 +14,26 @@ component = {
     'Na': 22.989767700,
     'K': 38.9637069000,
     'Ca': 39.9625912000,
-    'e': 0.000549}
+    'e': 0.000549,
+    'p': 1.00727647
+}
+
 
 class Composition:
 
     """Take composition formula and calculate corresponding mass"""
 
     def __init__(self, str):
-        ## Needs update to support general expression
+        # Needs update to support general expression
         # This pattern will match an uppercase character followed by 0 or more
         # lowercase characters denoting the element/group, followed by 0 or more
         # digits denoting the quantity of the entity (defaults to 1 if no number is present)
-        compo_pattern = re.compile(r'([A-Z][a-z]*)(\d*)')
+        compo_pattern = re.compile(r'((?:[A-Z][a-z]*)|e|p)(\d*)')
+
         self.dict = {}
         self.mass = 0.0
         self.compo = str
-        
+
         for match in compo_pattern.findall(str):
             count = 0
             if match[1] == '':
@@ -41,8 +45,3 @@ class Composition:
             else:
                 self.dict[match[0]] = count
             self.mass += component[match[0]] * count
-
-            
-
-
-

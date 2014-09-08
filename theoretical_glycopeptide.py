@@ -78,6 +78,21 @@ class TheoreticalIonFragment(object):
         return seq_space
 
 
+def get_glycan_identities(colnames):
+    glycan_identity = []
+    extract_state = False
+    for col in colnames:
+        if col == "Hypothesis MW":
+            extract_state = True
+            continue
+        elif col == "Adduct/Replacement":
+            extract_state = False
+            break
+        elif extract_state:
+            glycan_identity.append(col.replace("G:", ""))
+    return glycan_identity
+
+
 def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None, output_file=None):
     if output_file is None:
         output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
@@ -88,17 +103,12 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     if constant_modification_list is None and variable_modification_list is None:
         modification_table = ModificationTable.bootstrap()
 
-    #print("Reading %s" % result_file)
-    compo_dict = csv.DictReader(open(result_file, "r"), delimiter=",")
     site_list = [line.strip() for line in open(site_file, "r")]
     site_list = list(map(int, site_list))
 
+    compo_dict = csv.DictReader(open(result_file, "r"), delimiter=",")
     colnames = compo_dict.fieldnames
-    match_pattern = re.compile(r'^G:(\w+)')
-    glycan_identity = []
-    for col in colnames:
-        if match_pattern.match(col):
-            glycan_identity.extend(match_pattern.findall(col))
+    glycan_identity = get_glycan_identities(colnames)
 
     fragment_info = []
     # Each row as a dict.

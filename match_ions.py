@@ -8,6 +8,8 @@ import math
 from os.path import splitext
 import yaml
 
+from error_code_interface import NoIonsMatchedException
+
 Carbon = 12.00000
 Hydrogen = 1.0078250350
 Nitrogen = 14.0030740000
@@ -29,14 +31,15 @@ ms1_tolerance_default = 0.00001
 ms2_tolerance_default = 0.00002
 
 
-def Mergedicts(list):
+def Mergedicts(dicts_to_merge):
     #"firstrow" stores the data we will output. Items from other rows are incorporated into it if they have a ppm error closer to 0, or if they have a row not existing in the first row.
-    # in case the first list is zero, we need a loop here. "allzero" is used to check if all "rows in list" are empty.
+    # in case the first dicts_to_merge is zero, we need a loop here. "allzero" is used
+    # to check if all "rows in dicts_to_merge" are empty.
     allzero = True
-    if len(list) <= 1:
-        if list[0]:
+    if len(dicts_to_merge) <= 1:
+        if dicts_to_merge[0]:
             firstrow = []
-            for items in list[0]:
+            for items in dicts_to_merge[0]:
                 sameMatchFound = False
                 for items2 in firstrow:
                     if str(items['key']) == str(items2['key']):
@@ -50,19 +53,19 @@ def Mergedicts(list):
                     firstrow.append(items)
             return firstrow
         else:
-            list = []
-            return list
-    for row in list:
+            dicts_to_merge = []
+            return dicts_to_merge
+    for row in dicts_to_merge:
         if len(row) != 0:
             allzero = False
             firstrow = row
             break
     if allzero:
-        list = []
-    # if the list is empty anyway, just return the same list back.
-        return list
+        dicts_to_merge = []
+    # if the dicts_to_merge is empty anyway, just return the same dicts_to_merge back.
+        return dicts_to_merge
     else:
-        for row in list:
+        for row in dicts_to_merge:
             if len(row) != 0:
                 temprow = row
                 firstrow = []
@@ -79,8 +82,8 @@ def Mergedicts(list):
                     else:
                         firstrow.append(items)
                 break
-        # if the list isn't empty, merge them.
-        # Each of the "row in list" should be something like this: [{'ppm_error':
+        # if the dicts_to_merge isn't empty, merge them.
+        # Each of the "row in dicts_to_merge" should be something like this: [{'ppm_error':
         # -3.3899212497496274e-06, 'key': 'B3', 'obs_ion': 372.150116035},
         # {'ppm_error': -1.2204514502310785e-05, 'key': 'B4', 'obs_ion':
         # 532.175476035}, {'ppm_error': 1.812995934605501e-05, 'key': 'B4',
@@ -88,8 +91,10 @@ def Mergedicts(list):
         # 'B5', 'obs_ion': 645.266113035}, {'ppm_error': 4.080114450361758e-06,
         # 'key': 'B7', 'obs_ion': 922.376038035}, {'ppm_error':
         # 1.0112467130843996e-05, 'key': 'B14', 'obs_ion': 1741.8025510349999}]
-        for row in list:
-        # each of the "ReadingItems and firstrowReadingItems" should be something like this: {'ppm_error': -3.3899212497496274e-06, 'key': 'B3', 'obs_ion'}: 372.150116035}. If not, plz tell me.
+        for row in dicts_to_merge:
+        # each of the "ReadingItems and firstrowReadingItems" should be
+        # something like this: {'ppm_error': -3.3899212497496274e-06, 'key':
+        # 'B3', 'obs_ion'}: 372.150116035}. If not, plz tell me.
             if len(row) != 0:
                 for ReadingItems in row:
                     same_key_exists = False
@@ -130,7 +135,8 @@ def MergeRows(SourceData):
         if SourceData[row]['Glycopeptide_identifier'] == Storage['Glycopeptide_identifier']:
             Storage = SourceData[row]
             newStorage.append(Storage)
-            # If this is the last row in SourceData, merge the rows now, instead of doing it in the "else" statement.
+            # If this is the last row in SourceData, merge the rows now,
+            # instead of doing it in the "else" statement.
             if (row + 1) == len(SourceData):
                 # Declaring variables to store N P R T V X Y Z columns.
                 oi = []
@@ -171,7 +177,8 @@ def MergeRows(SourceData):
                 break
 
         else:
-            # The new row has another glycopep identifier, so we are storing it in Storage for the next loop.
+            # The new row has another glycopep identifier, so we are storing it
+            # in Storage for the next loop.
             Storage = SourceData[row]
             # Lets start merging the rows now.
             # Declaring variables to store N P R T V X Y Z columns.
@@ -220,7 +227,8 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
     :param yaml_data: path to yaml file from earlier MS1 analysis
     :param outfile: path to the file to write output to. Defaults to theo_fragment_file + ".match_frags".
     '''
-    print("ms1_tolerance %f, ms2_tolerance %f" % (ms1_tolerance, ms2_tolerance))
+    print("ms1_tolerance %f, ms2_tolerance %f" %
+          (ms1_tolerance, ms2_tolerance))
     if outfile is None:
         outfile = splitext(splitext(theo_fragment_file)[0])[0] + '.match_frags'
 
@@ -233,19 +241,23 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
 
     results = []
 
-    for lines in f_csv:  # reading each line in theoretical ions file generated from gly1 results
+    # reading each line in theoretical ions file generated from gly1 results
+    for lines in f_csv:
 
         for rows in data:  # reading yaml data scan by scan
 
             for more in rows['peaks']:
 
                 real_ions = []
-                real_ions = more['mass']  # all ions in scan assigned to list real_ions
-
+                # all ions in scan assigned to list real_ions
+                real_ions = more['mass']
+                scan_id = more['scans'][0]['id']
                 #print ("intensity array", more['intensity'])
                 #print ("number of elements" , more['num'])
 
-                info = more['scans'][:1]  # this takes the information from the first scan in case there are multiple merged scans
+                # this takes the information from the first scan in case there
+                # are multiple merged scans
+                info = more['scans'][:1]
                 for num in info:
 
                     #print ("mz", info['mz'])
@@ -263,9 +275,11 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                     oxoniums = []
                     for ox_ion in Oxonium_ions:
                         for ob_ions in real_ions:
-                            oxonium_ppm = (((ob_ions + Proton) - ox_ion) / (ob_ions + Proton))
+                            oxonium_ppm = (
+                                ((ob_ions + Proton) - ox_ion) / (ob_ions + Proton))
                             if math.fabs(oxonium_ppm) <= ms2_tolerance:
-                                oxoniums.append({"ion": (ob_ions + Proton), "ppm_error": oxonium_ppm, "key": ox_ion})
+                                oxoniums.append(
+                                    {"ion": (ob_ions + Proton), "ppm_error": oxonium_ppm, "key": ox_ion})
                                 #print ("\n", ob_ions, "ppm error:", oxonium_ppm)
                             else:
                                 pass
@@ -279,12 +293,17 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                     all_b_ions = []
                     for theo_ions in b_ions:
                         frag_mass = float(theo_ions["mass"])
-                        prot_ion = frag_mass - Hydrogen  # change this to proton once the error is found in Han's code
+                        # change this to proton once the error is found in
+                        # Han's code
+                        prot_ion = frag_mass - Proton
                         for obs_ions in real_ions:
-                            tandem_ppm = float((obs_ions - (prot_ion)) / obs_ions)
+                            tandem_ppm = float(
+                                (obs_ions - (prot_ion)) / obs_ions)
                             if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                b_type.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_b_ions.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                b_type.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                all_b_ions.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
                                 #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
                             else:
                                 pass
@@ -295,18 +314,24 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                     # else:
                     #	b_found = 0
 
-                    b_HexNAc_ions = ast.literal_eval(lines['b_ions_with_HexNAc'])
+                    b_HexNAc_ions = ast.literal_eval(
+                        lines['b_ions_with_HexNAc'])
                     b_HexNAc_len = float(len(b_HexNAc_ions))
                     # print "\n, b ions:"
                     b_HexNAc_type = []
                     for theo_ions in b_HexNAc_ions:
                         frag_mass = float(theo_ions["mass"])
-                        prot_ion = frag_mass - Hydrogen  # change this to proton once the error is found in Han's code
+                        # change this to proton once the error is found in
+                        # Han's code
+                        prot_ion = frag_mass - Proton
                         for obs_ions in real_ions:
-                            tandem_ppm = float((obs_ions - (prot_ion)) / obs_ions)
+                            tandem_ppm = float(
+                                (obs_ions - (prot_ion)) / obs_ions)
                             if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                b_HexNAc_type.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_b_ions.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"].split("+")[0], "ppm_error": tandem_ppm})
+                                b_HexNAc_type.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                all_b_ions.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"].split("+")[0], "ppm_error": tandem_ppm})
                                 #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
                             else:
                                 pass
@@ -319,12 +344,17 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                     all_y_ions = []
                     for theo_ions in y_ions:
                         frag_mass = float(theo_ions["mass"])
-                        prot_ion = frag_mass - Hydrogen  # change this to proton once the error is found in Han's code
+                        # change this to proton once the error is found in
+                        # Han's code
+                        prot_ion = frag_mass - Proton
                         for obs_ions in real_ions:
-                            tandem_ppm = float((obs_ions - (prot_ion)) / obs_ions)
+                            tandem_ppm = float(
+                                (obs_ions - (prot_ion)) / obs_ions)
                             if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                y_type.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_y_ions.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                y_type.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                all_y_ions.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
                                 #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm, "\n")
                             else:
                                 pass
@@ -334,18 +364,24 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                     # elif len_found ==0:
                         #y_found = 0
 
-                    y_HexNAc_ions = ast.literal_eval(lines['y_ions_with_HexNAc'])
+                    y_HexNAc_ions = ast.literal_eval(
+                        lines['y_ions_with_HexNAc'])
                     y_HexNAc_len = float(len(y_HexNAc_ions))
                     # print "\n, b ions:"
                     y_HexNAc_type = []
                     for theo_ions in y_HexNAc_ions:
                         frag_mass = float(theo_ions["mass"])
-                        prot_ion = frag_mass - Hydrogen  # change this to proton once the error is found in Han's code
+                        # change this to proton once the error is found in
+                        # Han's code
+                        prot_ion = frag_mass - Proton
                         for obs_ions in real_ions:
-                            tandem_ppm = float((obs_ions - (prot_ion)) / obs_ions)
+                            tandem_ppm = float(
+                                (obs_ions - (prot_ion)) / obs_ions)
                             if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                y_HexNAc_type.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_y_ions.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"].split("+")[0], "ppm_error": tandem_ppm})
+                                y_HexNAc_type.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                all_y_ions.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"].split("+")[0], "ppm_error": tandem_ppm})
                                 #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
                             else:
                                 pass
@@ -358,9 +394,11 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                         frag_mass = float(theo_ions["mass"])
                         prot_ion = frag_mass - Proton
                         for obs_ions in real_ions:
-                            tandem_ppm = float((obs_ions - (prot_ion)) / obs_ions)
+                            tandem_ppm = float(
+                                (obs_ions - (prot_ion)) / obs_ions)
                             if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                stub_type.append({"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                stub_type.append(
+                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
                                 #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm, "\n")
                             else:
                                 pass
@@ -368,25 +406,45 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
                     #	stub_found = len (stub_type)
                     # else:
                     #	stub_found = 0
-                    results.append({"MS1_Score": lines["MS1_Score"], "Obs_Mass": lines["Obs_Mass"], "Calc_mass": lines["Calc_mass"], "ppm_error": lines["ppm_error"], "Peptide": lines["Peptide"], "Peptide_mod": lines["Peptide_mod"], "Glycan": lines["Glycan"], "vol": lines["vol"], "glyco_sites": lines["glyco_sites"], "startAA": lines["startAA"], "endAA": lines["endAA"], "Seq_with_mod": lines["Seq_with_mod"], "Glycopeptide_identifier": lines[
-                                   "Seq_with_mod"] + lines["Glycan"], "Oxonium_ions": oxoniums, "bare_b_ions": b_type, "possible_b_ions_HexNAc": len(b_HexNAc_ions), "total_b_ions": b_len, "bare_y_ions": y_type, "possible_y_ions_HexNAc": len(y_HexNAc_ions), "total_y_ions": y_len, "b_ions_with_HexNAc": b_HexNAc_type, "y_ions_with_HexNAc": y_HexNAc_type, "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type})
+                    results.append(
+                        {"MS1_Score": lines["MS1_Score"], "Obs_Mass": lines["Obs_Mass"], "Calc_mass": lines["Calc_mass"],
+                         "ppm_error": lines["ppm_error"], "Peptide": lines["Peptide"], "Peptide_mod": lines["Peptide_mod"],
+                         "Glycan": lines["Glycan"],
+                         "vol": lines["vol"], "glyco_sites": lines["glyco_sites"], "startAA": lines["startAA"], "endAA": lines["endAA"],
+                         "Seq_with_mod": lines["Seq_with_mod"], "Glycopeptide_identifier": lines["Seq_with_mod"] + lines["Glycan"],
+                         "Oxonium_ions": oxoniums, "bare_b_ions": b_type, "possible_b_ions_HexNAc": len(b_HexNAc_ions),
+                         "total_b_ions": b_len, "bare_y_ions": y_type, "possible_y_ions_HexNAc": len(y_HexNAc_ions),
+                         "total_y_ions": y_len, "b_ions_with_HexNAc": b_HexNAc_type, "y_ions_with_HexNAc": y_HexNAc_type,
+                         "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type,
+                         "scan_id": scan_id
+                         })
                 else:
                     pass
 
-    merged_results = MergeRows(results)
-    for i in merged_results:
-        if i["Glycopeptide_identifier"] == "DTIC(Carbamidomethyl)IGYHAN(Deamidated)N(HexNAc)STDTVDTVLEK[1;5;4;2;0]":
-            #print ("l3", i['b_ion_coverage'])
-            pass
+    if(len(results) < 1):
+        raise NoIonsMatchedException("No matches found from theoretical ions in MS2 deconvoluted results")
 
-    keys = ["MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites", "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
-            "bare_b_ions", "possible_b_ions_HexNAc", "total_b_ions", "bare_y_ions", "possible_y_ions_HexNAc", "total_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage", "Stub_ions"]
+    merged_results = MergeRows(results)
+    # for i in merged_results:
+    #     if i["Glycopeptide_identifier"] == "DTIC(Carbamidomethyl)IGYHAN(Deamidated)N(HexNAc)STDTVDTVLEK[1;5;4;2;0]":
+    # print ("l3", i['b_ion_coverage'])
+    #         pass
+
+    keys = [
+        "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites",
+        "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
+        "bare_b_ions", "possible_b_ions_HexNAc", "total_b_ions", "bare_y_ions", "possible_y_ions_HexNAc",
+        "total_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage",
+        "Stub_ions", "scan_id"]
     f = open(outfile + '.csv', 'wb')
     dict_writer = csv.DictWriter(f, keys)
     dict_writer.writer.writerow(keys)
     dict_writer.writerows(merged_results)
     f.close()
     return outfile + '.csv'
+
+
+
 
 if __name__ == '__main__':
     import sys
