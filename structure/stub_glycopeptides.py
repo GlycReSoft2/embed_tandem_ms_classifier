@@ -1,6 +1,6 @@
-from modification import Modification
-from composition import Composition
-from residue import Residue
+from structure.modification import Modification
+from structure.composition import Composition
+from structure.residue import Residue
 import re
 
 Deamidation = 0.9840099999999978
@@ -12,10 +12,8 @@ dHex = 146.05791
 Water = 18.0105647000
 
 
-class stubs:
-
+class StubGlycopeptide:
     """Calculates peptide and stub glycopeptide ions, also returns oxonium ions based on glycan composition"""
-
     def __init__(self, sequence, modification, sites_num, glycan_comp):
 
         self.pep_seq = sequence
@@ -29,13 +27,13 @@ class stubs:
             self.HexNAc = ''
             self.NeuAc = ''
         else:
-            self.glycans = re.findall('\\b\\d+\\b', self.glycan_compo)
+            self.glycans = re.findall(r'\b\d+\b', self.glycan_compo)
             self.dHex = int(self.glycans[0])
             self.Hex = int(self.glycans[1])
             self.HexNAc = int(self.glycans[2])
             self.NeuAc = int(self.glycans[3])
 
-        if modification == '':
+        if modification == '' or modification is None:
             self.n_mod = ''
             self.mod_type = ''
         else:
@@ -45,10 +43,13 @@ class stubs:
             self.mod_type = mods[0][1]
 
         while True:
-            self.begin, self.end = self.pep_seq.find('('), self.pep_seq.find(')')
+            self.begin, self.end = self.pep_seq.find(
+                '('), self.pep_seq.find(')')
             if self.begin != -1 and self.end != -1:
-                # add this to capture the carbamidomethyls--> + " " + peptide[begin+1:end]
-                self.pep_seq = self.pep_seq[:self.begin] + self.pep_seq[self.end + 1:]
+                # add this to capture the carbamidomethyls--> + " " +
+                # peptide[begin+1:end]
+                self.pep_seq = self.pep_seq[
+                    :self.begin] + self.pep_seq[self.end + 1:]
             else:
                 break
 
@@ -56,20 +57,22 @@ class stubs:
 
         self.mass += Composition("H2O").mass
 
-        self.Oxo_ions = [204.0864, 186.0754, 163.0601, 168.0650, 138.0542, 366.1394, 274.0920, 292.1026]
+        self.oxonium_ions = [204.0864, 186.0754, 163.0601,
+                             168.0650, 138.0542, 366.1394, 274.0920, 292.1026]
 
-        ''' the following part was to add oxonium ions based on presence of sialylation; now we'll instead check if a high mannose composition has 274 or 292 and reduce score:
-        if self.NeuAc == 0:
-            self.Oxo_ions = [204.0864,186.0754,163.0601,168.0650,138.0542,366.1394]
+        # The following part was to add oxonium ions based on presence of sialylation.
+        # now we'll instead check if a high mannose composition has 274 or 292 and reduce score:
+        # if self.NeuAc == 0:
+        #     self.Oxo_ions = [204.0864,186.0754,163.0601,168.0650,138.0542,366.1394]
 
-        elif self.NeuAc > 0:
-            self.Oxo_ions = [204.0864,186.0754,163.0601,168.0650,138.0542,366.1394,274.0920,292.1026]'''
+        # elif self.NeuAc > 0:
+        #     self.Oxo_ions = [204.0864,186.0754,163.0601,168.0650,138.0542,366.1394,274.0920,292.1026]
 
-    def getStubs(self):
+    def get_stubs(self):
         """returns a list of dicts with peptide and stub glycopeptide ions """
         for i in self.pep_seq:
             res = Residue()
-            res.bySymbol(i)
+            res.by_symbol(i)
             if i == 'C':
                 self.mass += Carbamidomethyl
             self.mass += res.mass
@@ -92,15 +95,19 @@ class stubs:
 
                     for j in range(1, 3, 1):
                         if j == 1:
-                            key = "pep+" + str(j) + "HexNAc+" + "0Hexose" + "-" + str(i) + "sites"
+                            key = "pep+" + \
+                                str(j) + "HexNAc+" + "0Hexose" + "-" + str(
+                                    i) + "sites"
                             mass = self.mass + Proton + (i * (j * HexNAc))
                             # print key, mass
                             stubs.append({"key": key, "mass": mass})
 
                         elif (j == 2):
                             for k in range(0, 4, 1):
-                                key = "pep+" + str(j) + "HexNAc+" + str(k) + "Hexose" + "-" + str(i) + "sites"
-                                mass = self.mass + Proton + (i * ((j * HexNAc) + (k * Hex)))
+                                key = "pep+" + str(j) + "HexNAc+" + str(
+                                    k) + "Hexose" + "-" + str(i) + "sites"
+                                mass = self.mass + Proton + \
+                                    (i * ((j * HexNAc) + (k * Hex)))
                                 # print key, mass
                                 stubs.append({"key": key, "mass": mass})
 
@@ -112,7 +119,9 @@ class stubs:
 
                     for j in range(1, 3, 1):
                         if j == 1:
-                            key = "pep+" + str(j) + "HexNAc+" + "0Hexose" + "-" + str(i) + "sites"
+                            key = "pep+" + \
+                                str(j) + "HexNAc+" + "0Hexose" + "-" + str(
+                                    i) + "sites"
                             mass = self.mass + Proton + (i * (j * HexNAc))
                             # print key, mass
                             stubs.append({"key": key, "mass": mass})
@@ -120,8 +129,10 @@ class stubs:
                         if (j == 2):
                             for l in range(0, 2, 1):
                                 for k in range(0, 4, 1):
-                                    key = "pep+" + str(j) + "HexNAc+" + str(k) + "Hexose" + str(l) + "dHex" + "-" + str(i) + "sites"
-                                    mass = self.mass + Proton + (i * ((j * HexNAc) + (k * Hex) + (l * dHex)))
+                                    key = "pep+" + str(j) + "HexNAc+" + str(k) + "Hexose" + str(l) +\
+                                          "dHex" + "-" + str(i) + "sites"
+                                    mass = self.mass + Proton + \
+                                        (i * ((j * HexNAc) + (k * Hex) + (l * dHex)))
                                     # print key, mass
                                     stubs.append({"key": key, "mass": mass})
 
@@ -131,8 +142,8 @@ class stubs:
 
         return stubs
 
-    def getOxoniums(self):
+    def get_oxonium_ions(self):
         '''returns a list of oxonium ions based on glycan composition'''
-        Ox_ions = self.Oxo_ions
+        Ox_ions = self.oxonium_ions
 
         return Ox_ions

@@ -1,5 +1,6 @@
 from modification import Modification
 
+
 class Fragment:
     """ Fragment from glycopeptide """
     def __init__(self, type, pos, mod_dict, mass):
@@ -11,7 +12,7 @@ class Fragment:
         self.mod_dict = mod_dict
 
         for key, value in self.mod_dict.items():
-            self.mass += Modification(key).mass * value;
+            self.mass += Modification(key).mass * value
 
     def get(self):
         """
@@ -22,20 +23,20 @@ class Fragment:
         fragment_name.append(str(self.pos+1))
         return ''.join(fragment_name)
 
-    def getMass(self):
+    def get_mass(self):
         return self.mass
 
-    def getModificationNumber(self, mod_name):
+    def get_modification_number(self, mod_name):
         if mod_name in self.mod_dict:
             return self.mod_dict[mod_name]
         else:
             return 0
 
-    def getModifications(self):
+    def get_modifications(self):
         for name, number in self.mod_dict.items():
             yield [name, number]
 
-    def getFragmentName(self):
+    def get_fragment_name(self):
         """
            Connect the information into string.
         """
@@ -55,5 +56,3 @@ class Fragment:
                     pass
 
         return ''.join(fragment_name)
-
-

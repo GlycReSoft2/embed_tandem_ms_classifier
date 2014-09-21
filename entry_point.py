@@ -9,7 +9,6 @@ sys.path = [(os.path.dirname(os.path.abspath(__file__)))] + sys.path
 
 #import atexit
 import json
-import subprocess
 
 # Handles URI Decoding incompatibility with py2K
 try:
@@ -268,8 +267,9 @@ def main():
     model_diagnostics_app.set_defaults(func=model_diagnostics_app_function)
 
     try:
-        # Always generate an error map file on run, for sanity's sake.
-        error_map_file = ErrorCodingMeta.build_error_code_map()
+        # Always generate an error map file on run, for sanity's sake. But users may not have write-access
+        # to the install directory. Need to use tempfile or other source?
+        # error_map_file = ErrorCodingMeta.build_error_code_map()
         args = app.parse_args()
         args = args.__dict__
         func = args.pop("func")

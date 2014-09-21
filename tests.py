@@ -1,8 +1,10 @@
+import os
 import unittest
 
 import csv
 
 import theoretical_glycopeptide
+import entry_point
 
 from structure import sequence
 from structure import composition
@@ -38,18 +40,79 @@ electron_mass = 0.000549
 proton_mass = 1.00727647
 
 
+class TestIonMatchingPipelineProgram(unittest.TestCase):
+    ms1_matching_output_file = "test_data/MS1-matching-output 20131219_005.csv"
+    ms2_decon_file = "test_data/YAML-input-for-MS2-20131219_005.mzML.results"
+    glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
+    constant_modifications = ["Carbamidomethyl (C)"]
+    variable_modifications = ["Deamidated (N)", "Deamidated (Q)"]
+    method = "full"
+    ms1_match_tolerance = 1E-05
+    ms2_match_tolerance = 2E-05
+
+    theoretical_ion_space_file = "test_data/MS1-matching-output 20131219_005.theoretical_ions.csv"
+    ms2_match_file = "test_data/MS1-matching-output 20131219_005.match_frags.csv"
+    postprocessed_ions_file = "test_data/MS1-matching-output 20131219_005.processed.csv"
+    model_file_path = "test_data/MS1-matching-output 20131219_005.model.csv"
+    test_model_file_path = "test_data/Test Model.csv"
+    classification_results_file = None
+    model_eval_file = None
+
+    def test_1_theoretical_ion_space_step(self):
+        print("test_1_theoretical_ion_space_step")
+        theo_ions = entry_point.generate_theoretical_ion_space(
+            self.ms1_matching_output_file, self.glycosylation_sites_file,
+            self.constant_modifications, self.variable_modifications)
+        self.assertTrue(os.path.exists(theo_ions))
+        self.theoretical_ion_space_file = theo_ions
+
+    def test_2_match_ions_step(self):
+        print("test_2_match_ions_step")
+        matches = entry_point.match_deconvoluted_ions(
+            self.theoretical_ion_space_file, self.ms2_decon_file,
+            self.ms1_match_tolerance, self.ms2_match_tolerance)
+        self.assertTrue(os.path.exists(matches))
+        self.ms2_match_file = matches
+
+    def test_3_postprocess_matches_step(self):
+        print("test_3_postprocess_matches_step")
+        self.postprocessed_ions_file = entry_point.postprocess_matches(
+            self.ms2_match_file)
+        self.assertTrue(os.path.exists(self.postprocessed_ions_file))
+
+    def test_4_build_model_step(self):
+        print("test_4_build_model_step")
+        self.model_file_path = entry_point.prepare_model_file(self.postprocessed_ions_file,
+                                                              method=self.method)
+        self.assertTrue(os.path.exists(self.model_file_path))
+
+    def test_5_classify_with_model_step(self):
+        print("test_5_classify_with_model_step")
+        self.classification_results_file = entry_point.classify_data_by_model(self.postprocessed_ions_file,
+                                                                              self.test_model_file_path,
+                                                                              method=self.method)
+        self.assertTrue(os.path.exists(self.classification_results_file))
+
+    def test_6_evaluate_model_step(self):
+        print("test_6_evaluate_model_step")
+        self.model_eval_file = entry_point.ModelDiagnosticsTask(self.model_file_path, self.method).run()
+        self.assertTrue(os.path.exists(self.model_eval_file))
+
+
 class TestTheoreticalIonSpaceProgram(unittest.TestCase):
-    glycan_identities = ['GalNAcS', 'GalP', 'GalS', 'NeuGc', 'Hex', 'Pen', 'Fuc', 'Neu',
-                         'HexNAc', 'NeuAcAc', 'ManP', 'Kdn', 'HexN', 'HexA', 'GlcNAcS',
-                         'Xxx', 'GlcAS', 'GalNAcS2', 'Rha', 'Xyl', 'NeuAc', 'Water']
+    glycan_identities = [
+        'GalNAcS', 'GalP', 'GalS', 'NeuGc', 'Hex', 'Pen', 'Fuc', 'Neu',
+        'HexNAc', 'NeuAcAc', 'ManP', 'Kdn', 'HexN', 'HexA', 'GlcNAcS',
+        'Xxx', 'GlcAS', 'GalNAcS2', 'Rha', 'Xyl', 'NeuAc', 'Water']
 
     def test_glycan_identity_extraction(self):
         #print("Reading %s" % result_file)
-        result_file = "test_data/ResultOfData_input_for_MS1_matching_20131219_005_isos.csv"
+        result_file = "test_data/MS1-matching-output 20131219_005.csv"
         compo_dict = csv.DictReader(open(result_file, "r"), delimiter=",")
 
         colnames = compo_dict.fieldnames
-        glycan_identity = theoretical_glycopeptide.get_glycan_identities(colnames)
+        glycan_identity = theoretical_glycopeptide.get_glycan_identities(
+            colnames)
         self.assertTrue(all([glycan_identity[i] == self.glycan_identities[i]
                              for i in range(len(self.glycan_identities))]))
 
@@ -58,7 +121,7 @@ class TestSequenceFragmentation(unittest.TestCase):
 
     def test_fragment_mass_calculations(self):
         seq_obj = sequence.Sequence(sequence_str)
-        for i, frag in enumerate(seq_obj.getFragments("B")):
+        for i, frag in enumerate(seq_obj.get_fragments("B")):
             self.assertAlmostEqual(frag[0].mass, b_ion_fragment_masses[i])
 
 

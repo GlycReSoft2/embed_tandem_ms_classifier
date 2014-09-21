@@ -1,6 +1,11 @@
 import re
 
-component = {
+# This pattern will match an uppercase character followed by 0 or more
+# lowercase characters denoting the element/group, followed by 0 or more
+# digits denoting the quantity of the entity (defaults to 1 if no number is present)
+composition_formula_pattern = re.compile(r'((?:[A-Z][a-z]*)|e|p)(\d*)')
+
+name_to_mass = {
     'C': 12.00000,
     'H': 1.0078250350,
     'N': 14.0030740000,
@@ -19,22 +24,27 @@ component = {
 }
 
 
+def composition_to_mass(formula):
+    '''Fast, low allocation mass computation'''
+    mass = 0.0
+    tokens = composition_formula_pattern.findall(formula)
+    for name, count in tokens:
+        if count == '':
+            count = 1
+        else:
+            count = int(count)
+        mass += (name_to_mass[name] * count)
+    return mass
+
+
 class Composition:
-
     """Take composition formula and calculate corresponding mass"""
-
-    def __init__(self, str):
-        # Needs update to support general expression
-        # This pattern will match an uppercase character followed by 0 or more
-        # lowercase characters denoting the element/group, followed by 0 or more
-        # digits denoting the quantity of the entity (defaults to 1 if no number is present)
-        compo_pattern = re.compile(r'((?:[A-Z][a-z]*)|e|p)(\d*)')
-
+    def __init__(self, formula):
         self.dict = {}
         self.mass = 0.0
-        self.compo = str
+        self.compo = formula
 
-        for match in compo_pattern.findall(str):
+        for match in composition_formula_pattern.findall(formula):
             count = 0
             if match[1] == '':
                 count = 1
@@ -44,4 +54,4 @@ class Composition:
                 self.dict[match[0]] += count
             else:
                 self.dict[match[0]] = count
-            self.mass += component[match[0]] * count
+            self.mass += name_to_mass[match[0]] * count

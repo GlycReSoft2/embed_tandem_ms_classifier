@@ -32,7 +32,8 @@ ms2_tolerance_default = 0.00002
 
 
 def Mergedicts(dicts_to_merge):
-    #"firstrow" stores the data we will output. Items from other rows are incorporated into it if they have a ppm error closer to 0, or if they have a row not existing in the first row.
+    # "firstrow" stores the data we will output. Items from other rows are incorporated
+    # into it if they have a ppm error closer to 0, or if they have a row not existing in the first row.
     # in case the first dicts_to_merge is zero, we need a loop here. "allzero" is used
     # to check if all "rows in dicts_to_merge" are empty.
     allzero = True
@@ -221,14 +222,13 @@ def MergeRows(SourceData):
     return MergedList
 
 
-def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_default, ms2_tolerance=ms2_tolerance_default, outfile=None):
+def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_default,
+                ms2_tolerance=ms2_tolerance_default, outfile=None):
     '''
     :param theo_fragment_file: path to file containing all theoretical peptides
     :param yaml_data: path to yaml file from earlier MS1 analysis
     :param outfile: path to the file to write output to. Defaults to theo_fragment_file + ".match_frags".
     '''
-    print("ms1_tolerance %f, ms2_tolerance %f" %
-          (ms1_tolerance, ms2_tolerance))
     if outfile is None:
         outfile = splitext(splitext(theo_fragment_file)[0])[0] + '.match_frags'
 

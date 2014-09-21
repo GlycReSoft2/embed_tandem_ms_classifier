@@ -1,6 +1,7 @@
-from composition import Composition
+from structure import ResidueBase
+from structure.composition import Composition, composition_to_mass
 
-residue_symbol = {
+symbol_to_residue = {
     'A': 'Ala',
     'R': 'Arg',
     'N': 'Asn',
@@ -21,6 +22,10 @@ residue_symbol = {
     'W': 'Trp',
     'Y': 'Tyr',
     'V': 'Val'}
+
+
+residue_to_symbol = {value: key for key, value in symbol_to_residue.items()}
+
 
 residue_table = {
     'Ala': 'C3H5NO',
@@ -51,31 +56,31 @@ residue_table = {
     'Water': 'H2O'}
 
 
-class Residue:
+class Residue(ResidueBase):
+    @staticmethod
+    def mass_by_name(sym):
+        name = symbol_to_residue.get(sym, sym)
+        formula = residue_table.get(name)
+        return composition_to_mass(formula)
 
     """Basic mass values for peptide sequences"""
-
     def __init__(self, aa=''):
-        self.byName(aa)
-        #global residue_table
-        #self.compo = residue_table.get(aa)
-        #self.name = aa
-        # if self.compo != None:
-        #    self.mass = Composition(self.compo).mass
-        # else:
-        #    self.mass = 0.0
+        self.symbol = None
+        self.name = None
+        self.mass = 0.0
+        self.by_name(aa)
 
-    def byName(self, name):
+    def by_name(self, name):
         self.compo = residue_table.get(name)
         self.name = name
-        if self.compo != None:
+        if self.compo is not None:
             self.mass = Composition(self.compo).mass
         else:
             self.mass = 0.0
 
-    def bySymbol(self, symbol):
-        name = residue_symbol[symbol]
-        self.byName(name)
+    def by_symbol(self, symbol):
+        name = symbol_to_residue[symbol]
+        self.by_name(name)
         self.symbol = symbol
 
     def __repr__(self):

@@ -1,3 +1,4 @@
+
 #import io
 import re
 from os.path import splitext
@@ -481,7 +482,9 @@ class ModelDiagnosticsTask(ModelTask):
 
     def plot_feature_importance(self, ax):
         if not hasattr(self.classifier, "feature_importances_"):
-            raise Exception("Has no feature importances")
+            #raise Exception("Has no feature importances")
+            ax.text(0.5, 0.5, "This classifier does not support\nfeature importance")
+            ax.axis([0, 1, 0, 1])
         else:
             ax.bar(np.arange(len(self.classifier.feature_importances_)),
                    self.classifier.feature_importances_, align='center')

@@ -13,7 +13,7 @@ import csv
 #import json
 import os
 import re
-#import sys
+import pickle
 
 from collections import defaultdict
 
@@ -21,8 +21,9 @@ from collections import defaultdict
 from structure.modification import RestrictedModificationTable
 from structure.modification import ModificationTable
 from structure.sequence_space import SequenceSpace
+from structure.sequence import sequence_tokenizer
 #from structure.sequence import Sequence
-from structure.stub_glycopeptides import stubs
+from structure.stub_glycopeptides import StubGlycopeptide
 #from structure.fragment import Fragment
 
 KEYS = [
@@ -63,6 +64,8 @@ class TheoreticalIonFragment(object):
         items = cls.mod_pattern.findall(data)
         mod_list = []
         for i in items:
+            if i[1] == '':
+                continue
             mod = modification_table.get_modification(i[1], -1, int(i[0]))
             mod_list.append(mod)
         return mod_list
@@ -93,10 +96,54 @@ def get_glycan_identities(colnames):
     return glycan_identity
 
 
+def generate_fragments(
+    seq, num_sites=0, glycan_comp=None, pep_mod=None, seq_str="", seq_mod=None, theo_mass=0., mass_error=0.,
+        score=0, precur_mass=0, volume=0, start_pos=-1, end_pos=-1):
+    seq_mod = seq.get_sequence()
+    b_type = seq.get_fragments('B')
+    b_ions = []
+    b_ions_HexNAc = []
+    for b in b_type:
+        for fm in b:
+            key = fm.get_fragment_name()
+            if key == "B1" or re.search(r'B1\+', key):
+                # B1 Ions aren't actually seen in reality, but are an artefact of the generation process
+                # so do not include them in the output
+                continue
+            mass = fm.get_mass()
+            if "HexNAc" in key:
+                b_ions_HexNAc.append({"key": key, "mass": mass})
+            else:
+                b_ions.append({"key": key, "mass": mass})
+
+    y_type = seq.get_fragments('Y')
+    y_ions = []
+    y_ions_HexNAc = []
+    for y in y_type:
+        for fm in y:
+            key = fm.get_fragment_name()
+            mass = fm.get_mass()
+            if "HexNAc" in key:
+                y_ions_HexNAc.append({"key": key, "mass": mass})
+            else:
+                y_ions.append({"key": key, "mass": mass})
+
+    pep_stubs = StubGlycopeptide(seq_str, pep_mod, num_sites, glycan_comp)
+    stub_ions = pep_stubs.get_stubs()
+    oxonium_ions = pep_stubs.get_oxonium_ions()
+
+    return {
+        "MS1_Score": score, "Obs_Mass": precur_mass, "Calc_mass": theo_mass, "ppm_error": mass_error,
+        "Peptide": seq_str, "Peptide_mod": pep_mod, "Glycan": glycan_comp, "vol": volume, "glyco_sites": num_sites,
+        "startAA": start_pos, "endAA": end_pos, "Seq_with_mod": seq_mod,
+        "Glycopeptide_identifier": seq_mod + glycan_comp,
+        "Oxonium_ions": oxonium_ions, "pep_stub_ions": stub_ions, "bare_b_ions": b_ions, "bare_y_ions": y_ions,
+        "b_ions_with_HexNAc": b_ions_HexNAc, "y_ions_with_HexNAc": y_ions_HexNAc}
+
 def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None, output_file=None):
     if output_file is None:
         output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
-
+    pickle_file = open("_pickled_data.pkl", 'wb')
     modification_table = RestrictedModificationTable.bootstrap(
         constant_modification_list, variable_modification_list)
 
@@ -111,25 +158,19 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     glycan_identity = get_glycan_identities(colnames)
 
     fragment_info = []
-    # Each row as a dict.
-    #print("Creating set of all theoretical glycopeptides")
     for i, row in enumerate(compo_dict):
-        # if (i % 1000) == 0:
-            #print("%d total" % i)
-        # For each row, read the information of glycan compound, peptide sequence,
-        # ofGlycanAttachmentToPeptide, PeptideModification
         score = row['Score']
         precur_mass = row['MassSpec MW']
         theo_mass = row['Hypothesis MW']
         glycan_comp = row['Compound Key']
         seq_str = row['PeptideSequence']
         pep_mod = row['PeptideModification']
-        pep_mis = row['PeptideMissedCleavage#']
+        #pep_mis = row['PeptideMissedCleavage#']
         num_sites = int(row['#ofGlycanAttachmentToPeptide'])
         mass_error = row['PPM Error']
         volume = row['Total Volume']
 
-        if (seq_str == '') or (num_sites == 0):  # Not interested
+        if (seq_str == '') or (num_sites == 0):
             continue
 
         # Compute the set of modifications that can occur.
@@ -148,51 +189,51 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
 
         # Adjust the glycan_sites to relative position
         glycan_sites = [x - start_pos for x in glycan_sites]
-
         ss = TheoreticalIonFragment.get_search_space(
             row, glycan_identity, glycan_sites, seq_str, mod_list)
+        pickle.dump(ss, pickle_file, pickle.HIGHEST_PROTOCOL)
         seq_list = ss.get_theoretical_sequence(num_sites)
         for s in seq_list:
-            #print(seq_str, '\t', row['Compound Key'], mod_str, '\n', s.getSequence())
-            seq_mod = s.getSequence()
+            seq_mod = s.get_sequence()
 
-            b_type = s.getFragments('B')
+            b_type = s.get_fragments('B')
             b_ions = []
             b_ions_HexNAc = []
             for b in b_type:
                 for fm in b:
-                    key = fm.getFragmentName()
+                    key = fm.get_fragment_name()
                     if key == "B1" or re.search(r'B1\+', key):
                         # B1 Ions aren't actually seen in reality, but are an artefact of the generation process
                         # so do not include them in the output
                         continue
-                    mass = fm.getMass()
+                    mass = fm.get_mass()
                     if "HexNAc" in key:
                         b_ions_HexNAc.append({"key": key, "mass": mass})
                     else:
                         b_ions.append({"key": key, "mass": mass})
 
-            y_type = s.getFragments('Y')
+            y_type = s.get_fragments('Y')
             y_ions = []
             y_ions_HexNAc = []
             for y in y_type:
                 for fm in y:
-                    key = fm.getFragmentName()
-                    mass = fm.getMass()
+                    key = fm.get_fragment_name()
+                    mass = fm.get_mass()
                     if "HexNAc" in key:
                         y_ions_HexNAc.append({"key": key, "mass": mass})
                     else:
                         y_ions.append({"key": key, "mass": mass})
 
-            pep_stubs = stubs(seq_str, pep_mod, num_sites, glycan_comp)
-            stub_ions = pep_stubs.getStubs()
-            oxonium_ions = pep_stubs.getOxoniums()
+            pep_stubs = StubGlycopeptide(seq_str, pep_mod, num_sites, glycan_comp)
+            stub_ions = pep_stubs.get_stubs()
+            oxonium_ions = pep_stubs.get_oxonium_ions()
 
             fragment_info.append(
                 {"MS1_Score": score, "Obs_Mass": precur_mass, "Calc_mass": theo_mass, "ppm_error": mass_error,
-                 "Peptide": seq_str, "Peptide_mod": pep_mod, "Glycan": glycan_comp, "vol": volume, "glyco_sites": num_sites,
-                 "startAA": start_pos, "endAA": end_pos, "Seq_with_mod": seq_mod, "Glycopeptide_identifier": seq_mod + glycan_comp,
-                 "Oxonium_ions": oxonium_ions, "pep_stub_ions": stub_ions, "bare_b_ions": b_ions, "bare_y_ions": y_ions,
+                 "Peptide": seq_str, "Peptide_mod": pep_mod, "Glycan": glycan_comp, "vol": volume,
+                 "glyco_sites": num_sites, "startAA": start_pos, "endAA": end_pos, "Seq_with_mod": seq_mod,
+                 "Glycopeptide_identifier": seq_mod + glycan_comp, "Oxonium_ions": oxonium_ions,
+                 "pep_stub_ions": stub_ions, "bare_b_ions": b_ions, "bare_y_ions": y_ions,
                  "b_ions_with_HexNAc": b_ions_HexNAc, "y_ions_with_HexNAc": y_ions_HexNAc})
 
     fh = open(output_file + '.csv', 'wb')
@@ -200,6 +241,7 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     dict_writer.writer.writerow(KEYS)
     dict_writer.writerows(fragment_info)
     fh.close()
+    pickle_file.close()
     return output_file + '.csv'
 
 
