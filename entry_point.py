@@ -64,7 +64,8 @@ def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra, ms1_mat
     try:
         return match_ions.match_frags(
             theoretical_ion_space, deconvoluted_spectra,
-            ms1_match_tolerance, ms2_match_tolerance, None)
+            ms1_match_tolerance, ms2_match_tolerance, split_decon_data=True,
+            outfile=None)
     except match_ions.NoIonsMatchedException, e:
         raise NoIonsMatchedException(str(e))
 

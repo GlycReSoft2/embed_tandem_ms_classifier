@@ -13,7 +13,8 @@ def main(matched_ions_file, output_file=None):
     :param output_file: Path to file to write results to. Defaults to `matched_ions_file` + ".processed"
     '''
     if output_file is None:
-        output_file = splitext(splitext(matched_ions_file)[0])[0] + ".processed"
+        output_file = splitext(
+            splitext(matched_ions_file)[0])[0] + ".processed"
     results = csv.DictReader(open(matched_ions_file))
     scored_results = []
 
@@ -36,7 +37,8 @@ def main(matched_ions_file, output_file=None):
 
         b_HexNAc = ast.literal_eval(rows["b_ions_with_HexNAc"])
         b_HexNAc_found = len(b_HexNAc)
-        total_possible_b_HexNAc = float(ast.literal_eval(rows["possible_b_ions_HexNAc"]))
+        total_possible_b_HexNAc = float(
+            ast.literal_eval(rows["possible_b_ions_HexNAc"]))
         if total_possible_b_HexNAc == 0:
             percent_b_HexNAc = 0
         else:
@@ -44,7 +46,8 @@ def main(matched_ions_file, output_file=None):
 
         y_HexNAc = ast.literal_eval(rows["y_ions_with_HexNAc"])
         y_HexNAc_found = len(y_HexNAc)
-        total_possible_y_HexNAc = float(ast.literal_eval(rows["possible_y_ions_HexNAc"]))
+        total_possible_y_HexNAc = float(
+            ast.literal_eval(rows["possible_y_ions_HexNAc"]))
         if total_possible_y_HexNAc == 0:
             percent_y_HexNAc = 0
         else:
@@ -59,14 +62,17 @@ def main(matched_ions_file, output_file=None):
         glycans = re.findall('\\b\\d+\\b', rows["Glycan"])
         NeuAc = int(glycans[3])
 
-        if len(Oxoniums) < 2:  # checking for oxonium ions, if less than 2, MS2 score = 0
+        # checking for oxonium ions, if less than 2, MS2 score = 0
+        if len(Oxoniums) < 2:
             MS2_score = 0.0
         else:                   # proceed only if 2 or more oxoniums are found
             MS2_score += (0.02 * oxoniums_found)
 
-            MS2_score += ((percent_b * 2.00) + (percent_y * 2.00) + (0.01 * stubs_found))
+            MS2_score += (
+                (percent_b * 2.00) + (percent_y * 2.00) + (0.01 * stubs_found))
 
-            # decrease the score if NeuAc oxoniums are seen in a Non-NeuAc composition
+            # decrease the score if NeuAc oxoniums are seen in a Non-NeuAc
+            # composition
             if NeuAc != 0:
                 pass
 
@@ -80,7 +86,8 @@ def main(matched_ions_file, output_file=None):
         if (y_HexNAc_found == 0 and b_HexNAc_found == 0):
             pass
         else:
-            MS2_score += ((percent_b_HexNAc * 0.02) + (percent_y_HexNAc * 0.02))
+            MS2_score += (
+                (percent_b_HexNAc * 0.02) + (percent_y_HexNAc * 0.02))
 
         scored_results.append({"MS1_Score": rows["MS1_Score"],
                                "Obs_Mass": rows["Obs_Mass"],
@@ -114,11 +121,35 @@ def main(matched_ions_file, output_file=None):
                                })
 
     keys = [
-        "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites",
-        "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions", "bare_b_ions", "total_b_ions_possible", "bare_y_ions",
-        "total_y_ions_possible", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage", "Stub_ions",
-        "percent_b_ion_with_HexNAc_coverage", "percent_y_ion_with_HexNAc_coverage", "percent_b_ion_coverage", "percent_y_ion_coverage",
-        "#_of_stubs_found", 'scan_id']
+        "MS1_Score",
+        "Obs_Mass",
+        "Calc_mass",
+        "ppm_error",
+        "Peptide",
+        "Peptide_mod",
+        "Glycan",
+        "vol",
+        "glyco_sites",
+        "startAA",
+        "endAA",
+        "Seq_with_mod",
+        "Glycopeptide_identifier",
+        "Oxonium_ions",
+        "bare_b_ions",
+        "total_b_ions_possible",
+        "bare_y_ions",
+        "total_y_ions_possible",
+        "b_ions_with_HexNAc",
+        "y_ions_with_HexNAc",
+        "b_ion_coverage",
+        "y_ion_coverage",
+        "Stub_ions",
+        "percent_b_ion_with_HexNAc_coverage",
+        "percent_y_ion_with_HexNAc_coverage",
+        "percent_b_ion_coverage",
+        "percent_y_ion_coverage",
+        "#_of_stubs_found",
+        'scan_id']
 
     f = open(output_file + ".csv", 'wb')
     dict_writer = csv.DictWriter(f, keys)

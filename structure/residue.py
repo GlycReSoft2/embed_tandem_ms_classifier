@@ -1,5 +1,6 @@
 from structure import ResidueBase
 from structure.composition import Composition, composition_to_mass
+from utils.memoize import memoize
 
 symbol_to_residue = {
     'A': 'Ala',
@@ -57,7 +58,9 @@ residue_table = {
 
 
 class Residue(ResidueBase):
+
     @staticmethod
+    @memoize()
     def mass_by_name(sym):
         name = symbol_to_residue.get(sym, sym)
         formula = residue_table.get(name)

@@ -2,10 +2,11 @@
 
 import ast
 import csv
-#import json
 import math
 #import os
 from os.path import splitext
+from collections import Counter
+
 import yaml
 
 from error_code_interface import NoIonsMatchedException
@@ -222,213 +223,194 @@ def MergeRows(SourceData):
     return MergedList
 
 
-def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_default,
-                ms2_tolerance=ms2_tolerance_default, outfile=None):
+def split_decon_data_by_index(decon_data, splitting_index):
+    '''
+        It might be useful to know which scans in the data matched and which did not.
+        :param decon_data: dict-like yaml data describing the deconvoluted spectra we matched against
+        :param splitting_index: dict-like record of which peaks matched
+    '''
+    matched = []
+    no_matched = []
+    for i, scan in enumerate(decon_data['peaks']):
+        count = splitting_index.get(i)
+        scan["__matches"] = count
+        if count != 0:
+            matched.append(scan)
+        else:
+            no_matched.append(scan)
+    return matched, no_matched
+
+
+def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_default,
+                ms2_tolerance=ms2_tolerance_default, split_decon_data=False, outfile=None):
     '''
     :param theo_fragment_file: path to file containing all theoretical peptides
-    :param yaml_data: path to yaml file from earlier MS1 analysis
+    :param decon_data: path to yaml file from earlier MS1 analysis
+    :param ms1_tolerance: float tolerance for matching intact mass
+    :param ms2_tolerance: float tolerance for matching fragment ions
+    :param split_decon_data: bool flag whether to emit a file for all scans without matches
+                             and a file for all scans with matches.
     :param outfile: path to the file to write output to. Defaults to theo_fragment_file + ".match_frags".
     '''
     if outfile is None:
         outfile = splitext(splitext(theo_fragment_file)[0])[0] + '.match_frags'
 
-    #filename = "Transferrin-ions2.csv"
     f_csv = csv.DictReader(open(theo_fragment_file))
-    #datafile = "KK_20130630_007_group_ms2.yaml"
-    stream = open(yaml_data, 'r')
+    stream = open(decon_data, 'r')
     data = []
-    data.append(yaml.load(stream))
+    try:
+        loader = yaml.CLoader(stream)
+    except:
+        loader = yaml.Loader(stream)
+    data = (loader.get_data())
 
     results = []
-
+    did_match_cache = Counter()
     # reading each line in theoretical ions file generated from gly1 results
     for lines in f_csv:
+        for tandem_ms_ind, more in enumerate(data['peaks']):
+            more['_iterkey'] = tandem_ms_ind
+            real_ions = []
+            # all ions in scan assigned to list real_ions
+            real_ions = more['mass']
+            scan_id = more['scans'][0]['id']
 
-        for rows in data:  # reading yaml data scan by scan
+            # this takes the information from the first scan in case there
+            # are multiple merged scans
+            info = more['scans'][:1]
+            for num in info:
+                charge = num['z']
+                mass = num['mz']
+                ntr_mass = ((mass * charge) - (charge * Proton))
 
-            for more in rows['peaks']:
+                obs_mass = float(lines['Obs_Mass'])
+                ppm = ((ntr_mass - obs_mass) / ntr_mass)
 
-                real_ions = []
-                # all ions in scan assigned to list real_ions
-                real_ions = more['mass']
-                scan_id = more['scans'][0]['id']
-                #print ("intensity array", more['intensity'])
-                #print ("number of elements" , more['num'])
+            if math.fabs(ppm) <= ms1_tolerance:
+                did_match_cache[tandem_ms_ind] += 1
+                Oxonium_ions = ast.literal_eval(lines['Oxonium_ions'])
 
-                # this takes the information from the first scan in case there
-                # are multiple merged scans
-                info = more['scans'][:1]
-                for num in info:
+                oxoniums = []
+                for ox_ion in Oxonium_ions:
+                    for ob_ions in real_ions:
+                        oxonium_ppm = (
+                            ((ob_ions + Proton) - ox_ion) / (ob_ions + Proton))
+                        if math.fabs(oxonium_ppm) <= ms2_tolerance:
+                            oxoniums.append(
+                                {"ion": (ob_ions + Proton), "ppm_error": oxonium_ppm, "key": ox_ion})
 
-                    #print ("mz", info['mz'])
-                    charge = num['z']
-                    mass = num['mz']
-                    ntr_mass = ((mass * charge) - (charge * Proton))
-                    #print ("ntr-mass", ntr_mass)
+                # checking for b and y ions and ions with HexNAc:
+                b_ions = ast.literal_eval(lines['bare_b_ions'])
+                b_len = float(len(b_ions))
+                b_type = []
+                all_b_ions = []
+                for theo_ions in b_ions:
+                    frag_mass = float(theo_ions["mass"])
+                    prot_ion = frag_mass - Proton
+                    for obs_ions in real_ions:
+                        tandem_ppm = float(
+                            (obs_ions - (prot_ion)) / obs_ions)
+                        if math.fabs(tandem_ppm) <= ms2_tolerance:
+                            b_type.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                            all_b_ions.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                        else:
+                            pass
 
-                    obs_mass = float(lines['Obs_Mass'])
-                    ppm = ((ntr_mass - obs_mass) / ntr_mass)
+                b_HexNAc_ions = ast.literal_eval(
+                    lines['b_ions_with_HexNAc'])
+                b_HexNAc_type = []
+                for theo_ions in b_HexNAc_ions:
+                    frag_mass = float(theo_ions["mass"])
+                    prot_ion = frag_mass - Proton
+                    for obs_ions in real_ions:
+                        tandem_ppm = float(
+                            (obs_ions - (prot_ion)) / obs_ions)
+                        if math.fabs(tandem_ppm) <= ms2_tolerance:
+                            b_HexNAc_type.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                            all_b_ions.append(
+                                {"obs_ion": (obs_ions + Proton),
+                                 "key": theo_ions["key"].split("+")[0],
+                                 "ppm_error": tandem_ppm})
+                            #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
+                        else:
+                            pass
+                #b_HexNAc_len_found = len(b_HexNAc_type)
 
-                if math.fabs(ppm) <= ms1_tolerance:
-                    Oxonium_ions = ast.literal_eval(lines['Oxonium_ions'])
+                y_ions = list(ast.literal_eval(lines['bare_y_ions']))
+                # print "\n, y ions:"
+                y_len = float(len(y_ions))
+                y_type = []
+                all_y_ions = []
+                for theo_ions in y_ions:
+                    frag_mass = float(theo_ions["mass"])
+                    prot_ion = frag_mass - Proton
+                    for obs_ions in real_ions:
+                        tandem_ppm = float(
+                            (obs_ions - (prot_ion)) / obs_ions)
+                        if math.fabs(tandem_ppm) <= ms2_tolerance:
+                            y_type.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                            all_y_ions.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
 
-                    oxoniums = []
-                    for ox_ion in Oxonium_ions:
-                        for ob_ions in real_ions:
-                            oxonium_ppm = (
-                                ((ob_ions + Proton) - ox_ion) / (ob_ions + Proton))
-                            if math.fabs(oxonium_ppm) <= ms2_tolerance:
-                                oxoniums.append(
-                                    {"ion": (ob_ions + Proton), "ppm_error": oxonium_ppm, "key": ox_ion})
-                                #print ("\n", ob_ions, "ppm error:", oxonium_ppm)
-                            else:
-                                pass
-                    #oxo_found = len(oxoniums)
+                y_HexNAc_ions = ast.literal_eval(
+                    lines['y_ions_with_HexNAc'])
+                y_HexNAc_type = []
+                for theo_ions in y_HexNAc_ions:
+                    frag_mass = float(theo_ions["mass"])
+                    prot_ion = frag_mass - Proton
+                    for obs_ions in real_ions:
+                        tandem_ppm = float(
+                            (obs_ions - (prot_ion)) / obs_ions)
+                        if math.fabs(tandem_ppm) <= ms2_tolerance:
+                            y_HexNAc_type.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                            all_y_ions.append(
+                                {"obs_ion": (obs_ions + Proton),
+                                 "key": theo_ions["key"].split("+")[0],
+                                 "ppm_error": tandem_ppm})
 
-                    # checking for b and y ions and ions with HexNAc:
-                    b_ions = ast.literal_eval(lines['bare_b_ions'])
-                    b_len = float(len(b_ions))
-                    # print "\n, b ions:"
-                    b_type = []
-                    all_b_ions = []
-                    for theo_ions in b_ions:
-                        frag_mass = float(theo_ions["mass"])
-                        # change this to proton once the error is found in
-                        # Han's code
-                        prot_ion = frag_mass - Proton
-                        for obs_ions in real_ions:
-                            tandem_ppm = float(
-                                (obs_ions - (prot_ion)) / obs_ions)
-                            if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                b_type.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_b_ions.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
-                            else:
-                                pass
-
-                    #len_found = float(len(b_type))
-                    # if len_found != 0:
-                    #	b_found = (len_found/b_len)*100
-                    # else:
-                    #	b_found = 0
-
-                    b_HexNAc_ions = ast.literal_eval(
-                        lines['b_ions_with_HexNAc'])
-                    b_HexNAc_len = float(len(b_HexNAc_ions))
-                    # print "\n, b ions:"
-                    b_HexNAc_type = []
-                    for theo_ions in b_HexNAc_ions:
-                        frag_mass = float(theo_ions["mass"])
-                        # change this to proton once the error is found in
-                        # Han's code
-                        prot_ion = frag_mass - Proton
-                        for obs_ions in real_ions:
-                            tandem_ppm = float(
-                                (obs_ions - (prot_ion)) / obs_ions)
-                            if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                b_HexNAc_type.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_b_ions.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"].split("+")[0], "ppm_error": tandem_ppm})
-                                #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
-                            else:
-                                pass
-                    #b_HexNAc_len_found = len(b_HexNAc_type)
-
-                    y_ions = list(ast.literal_eval(lines['bare_y_ions']))
-                    # print "\n, y ions:"
-                    y_len = float(len(y_ions))
-                    y_type = []
-                    all_y_ions = []
-                    for theo_ions in y_ions:
-                        frag_mass = float(theo_ions["mass"])
-                        # change this to proton once the error is found in
-                        # Han's code
-                        prot_ion = frag_mass - Proton
-                        for obs_ions in real_ions:
-                            tandem_ppm = float(
-                                (obs_ions - (prot_ion)) / obs_ions)
-                            if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                y_type.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_y_ions.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm, "\n")
-                            else:
-                                pass
-                    #len_found = float(len(y_type))
-                    # if len_found != 0:
-                        #y_found = (len_found/y_len)*100
-                    # elif len_found ==0:
-                        #y_found = 0
-
-                    y_HexNAc_ions = ast.literal_eval(
-                        lines['y_ions_with_HexNAc'])
-                    y_HexNAc_len = float(len(y_HexNAc_ions))
-                    # print "\n, b ions:"
-                    y_HexNAc_type = []
-                    for theo_ions in y_HexNAc_ions:
-                        frag_mass = float(theo_ions["mass"])
-                        # change this to proton once the error is found in
-                        # Han's code
-                        prot_ion = frag_mass - Proton
-                        for obs_ions in real_ions:
-                            tandem_ppm = float(
-                                (obs_ions - (prot_ion)) / obs_ions)
-                            if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                y_HexNAc_type.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                all_y_ions.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"].split("+")[0], "ppm_error": tandem_ppm})
-                                #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
-                            else:
-                                pass
-                    #y_HexNAc_len_found = len(y_HexNAc_type)
-
-                    # checking for stub ions
-                    stub_ions = ast.literal_eval(lines['pep_stub_ions'])
-                    stub_type = []
-                    for theo_ions in stub_ions:
-                        frag_mass = float(theo_ions["mass"])
-                        prot_ion = frag_mass - Proton
-                        for obs_ions in real_ions:
-                            tandem_ppm = float(
-                                (obs_ions - (prot_ion)) / obs_ions)
-                            if math.fabs(tandem_ppm) <= ms2_tolerance:
-                                stub_type.append(
-                                    {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                                #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm, "\n")
-                            else:
-                                pass
-                    # if len(stub_type) != 0:
-                    #	stub_found = len (stub_type)
-                    # else:
-                    #	stub_found = 0
-                    results.append(
-                        {"MS1_Score": lines["MS1_Score"], "Obs_Mass": lines["Obs_Mass"], "Calc_mass": lines["Calc_mass"],
-                         "ppm_error": lines["ppm_error"], "Peptide": lines["Peptide"], "Peptide_mod": lines["Peptide_mod"],
-                         "Glycan": lines["Glycan"],
-                         "vol": lines["vol"], "glyco_sites": lines["glyco_sites"], "startAA": lines["startAA"], "endAA": lines["endAA"],
-                         "Seq_with_mod": lines["Seq_with_mod"], "Glycopeptide_identifier": lines["Seq_with_mod"] + lines["Glycan"],
-                         "Oxonium_ions": oxoniums, "bare_b_ions": b_type, "possible_b_ions_HexNAc": len(b_HexNAc_ions),
-                         "total_b_ions": b_len, "bare_y_ions": y_type, "possible_y_ions_HexNAc": len(y_HexNAc_ions),
-                         "total_y_ions": y_len, "b_ions_with_HexNAc": b_HexNAc_type, "y_ions_with_HexNAc": y_HexNAc_type,
-                         "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type,
-                         "scan_id": scan_id
-                         })
-                else:
-                    pass
+                # checking for stub ions
+                stub_ions = ast.literal_eval(lines['pep_stub_ions'])
+                stub_type = []
+                for theo_ions in stub_ions:
+                    frag_mass = float(theo_ions["mass"])
+                    prot_ion = frag_mass - Proton
+                    for obs_ions in real_ions:
+                        tandem_ppm = float(
+                            (obs_ions - (prot_ion)) / obs_ions)
+                        if math.fabs(tandem_ppm) <= ms2_tolerance:
+                            stub_type.append(
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                        else:
+                            pass
+                results.append(
+                    {"MS1_Score": lines["MS1_Score"], "Obs_Mass": lines["Obs_Mass"],
+                     "Calc_mass": lines["Calc_mass"],
+                     "ppm_error": lines["ppm_error"], "Peptide": lines["Peptide"],
+                     "Peptide_mod": lines["Peptide_mod"],
+                     "Glycan": lines["Glycan"],
+                     "vol": lines["vol"], "glyco_sites": lines["glyco_sites"],
+                     "startAA": lines["startAA"], "endAA": lines["endAA"],
+                     "Seq_with_mod": lines["Seq_with_mod"],
+                     "Glycopeptide_identifier": lines["Seq_with_mod"] + lines["Glycan"],
+                     "Oxonium_ions": oxoniums, "bare_b_ions": b_type, "possible_b_ions_HexNAc": len(b_HexNAc_ions),
+                     "total_b_ions": b_len, "bare_y_ions": y_type, "possible_y_ions_HexNAc": len(y_HexNAc_ions),
+                     "total_y_ions": y_len, "b_ions_with_HexNAc": b_HexNAc_type,
+                     "y_ions_with_HexNAc": y_HexNAc_type,
+                     "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type,
+                     "scan_id": scan_id
+                     })
+            else:
+                pass
 
     if(len(results) < 1):
         raise NoIonsMatchedException("No matches found from theoretical ions in MS2 deconvoluted results")
 
     merged_results = MergeRows(results)
-    # for i in merged_results:
-    #     if i["Glycopeptide_identifier"] == "DTIC(Carbamidomethyl)IGYHAN(Deamidated)N(HexNAc)STDTVDTVLEK[1;5;4;2;0]":
-    # print ("l3", i['b_ion_coverage'])
-    #         pass
 
     keys = [
         "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites",
@@ -441,9 +423,28 @@ def match_frags(theo_fragment_file, yaml_data, ms1_tolerance=ms1_tolerance_defau
     dict_writer.writer.writerow(keys)
     dict_writer.writerows(merged_results)
     f.close()
+
+    if(split_decon_data):
+        print("Splitting decon_data by matching criterion")
+        match, no_match = split_decon_data_by_index(data, did_match_cache)
+        decon_path = splitext(decon_data)[0]
+        match_fh = open(decon_path + '-matches.yaml', 'wb')
+        try:
+            dumper = yaml.CDumper(match_fh)
+        except:
+            dumper = yaml.Dumper(match_fh)
+        dumper.open()
+        dumper.represent(match)
+        match_fh.close()
+        no_match_fh = open(decon_path + '-no-matches.yaml', 'wb')
+        try:
+            dumper = yaml.CDumper(no_match_fh)
+        except:
+            dumper = yaml.Dumper(no_match_fh)
+        dumper.open()
+        dumper.represent(no_match)
+
     return outfile + '.csv'
-
-
 
 
 if __name__ == '__main__':

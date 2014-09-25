@@ -10,21 +10,15 @@
 # report.txt
 
 import csv
-#import json
 import os
 import re
-import pickle
 
 from collections import defaultdict
 
-#from structure.residue import Residue
 from structure.modification import RestrictedModificationTable
 from structure.modification import ModificationTable
 from structure.sequence_space import SequenceSpace
-from structure.sequence import sequence_tokenizer
-#from structure.sequence import Sequence
 from structure.stub_glycopeptides import StubGlycopeptide
-#from structure.fragment import Fragment
 
 KEYS = [
     "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol",
@@ -77,7 +71,6 @@ class TheoreticalIonFragment(object):
             glycan_compo[g] = int(row[''.join(['G:', g])])
         seq_space = SequenceSpace(
             seq_str, glycan_compo, glycan_sites, mod_list)
-        # print(seq_space)
         return seq_space
 
 
@@ -143,7 +136,6 @@ def generate_fragments(
 def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None, output_file=None):
     if output_file is None:
         output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
-    pickle_file = open("_pickled_data.pkl", 'wb')
     modification_table = RestrictedModificationTable.bootstrap(
         constant_modification_list, variable_modification_list)
 
@@ -191,7 +183,6 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
         glycan_sites = [x - start_pos for x in glycan_sites]
         ss = TheoreticalIonFragment.get_search_space(
             row, glycan_identity, glycan_sites, seq_str, mod_list)
-        pickle.dump(ss, pickle_file, pickle.HIGHEST_PROTOCOL)
         seq_list = ss.get_theoretical_sequence(num_sites)
         for s in seq_list:
             seq_mod = s.get_sequence()
@@ -241,7 +232,6 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     dict_writer.writer.writerow(KEYS)
     dict_writer.writerows(fragment_info)
     fh.close()
-    pickle_file.close()
     return output_file + '.csv'
 
 

@@ -46,18 +46,12 @@ modifications:{modifications}""".format(seq2=self.seq.get_sequence(), **self.__d
     def compose_sequence(self, modification_sites, num_sites):
 
         seq_space = []
-        print("modification_sites", modification_sites)
         num_modifications = len(self.modifications)
         modification_indices = [0] * num_modifications
-        print("num_modifications", num_modifications)
         while(True):
             if num_modifications != 0:
-                # print("num_modifications is not 0")
                 for ind in reversed(range(num_modifications)):
-                    print(modification_indices)
-                    print(modification_indices[ind], len(modification_sites[ind]))
                     if(modification_indices[ind] != len(modification_sites[ind])):
-                        # print("Breaking")
                         break
                     else:
                         modification_indices[ind] = 0
@@ -71,11 +65,8 @@ modifications:{modifications}""".format(seq2=self.seq.get_sequence(), **self.__d
                                            site in range(num_modifications)]
             else:
                 combination_index_sites = []
-            print("modification_sites", modification_sites)
-            print("modification_indices", modification_indices)
-            print("combination_index_sites", combination_index_sites)
+
             common_sites = set(*combination_index_sites)
-            print("common_sites", common_sites)
             glycosylation_sites = set(self.candidate_sites).difference(common_sites)
 
             if(len(common_sites) != sum(map(len, combination_index_sites)) or

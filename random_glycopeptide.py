@@ -4,12 +4,9 @@ import random
 import re
 import time
 
-import multiprocessing
-
 from structure.sequence import sequence_to_mass
 from structure.sequence import Sequence
 from structure.sequence import strip_modifications
-from structure.sequence import sequence_tokenizer
 
 from structure.sequence_space import SequenceSpace
 from structure.stub_glycopeptides import StubGlycopeptide
@@ -19,7 +16,6 @@ from structure import residue
 from structure import glycan_masses as glycan_masses_provider
 
 glycan_masses = glycan_masses_provider.load_from_file()
-min_glycan_mass = min([float(i) for i, j in glycan_masses])
 
 residue_symbols = residue.symbol_to_residue
 
@@ -148,7 +144,12 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
             sequence = ''.join(sequence)
             sequence_realizations = [sequence] + generate_random_glycoforms(sequence)
             for sequence_inst in sequence_realizations:
-                mass = sequence_to_mass(sequence_inst)
+                try:
+                    mass = sequence_to_mass(sequence_inst)
+                except Exception, e:
+                    print("An error occurred during massing of %s" % sequence_inst)
+                    print(e)
+                    raise
                 sequence_string = sequence_inst
 
                 # Decide whether the current sequence is a possible solution
@@ -232,19 +233,97 @@ def random_glycopeptide_to_sequence_space(sequence):
                 else:
                     y_ions.append({"key": key, "mass": mass})
 
-        pep_stubs = StubGlycopeptide(strip_modifications(seq_inst.get_sequence()), None,
+        peptide_seq = strip_modifications(seq_inst.get_sequence())
+        pep_stubs = StubGlycopeptide(peptide_seq, None,
                                      len(glycosylation_sites), glycan_composition_restring)
         stub_ions = pep_stubs.get_stubs()
         oxonium_ions = pep_stubs.get_oxonium_ions()
         ions = {
-            "precursor_mass": seq_inst.get_mass(),
+            "MS1_Score": None,
+            "Obs_Mass": seq_inst.get_mass(),
+            "Calc_mass": None,
+            "ppm_error": None,
+            "Peptide": peptide_seq,
+            "Peptide_mod": None,
+            "Glycan": glycan_composition_restring,
+            "vol": None,
+            "glyco_sites": len(glycan_map),
+            "startAA": None,
+            "endAA": None,
+            "Seq_with_mod": seq_inst.get_sequence(),
             "bare_b_ions": b_ions,
             "b_ions_with_HexNAc": b_ions_HexNAc,
             "bare_y_ions": y_ions,
             "y_ions_with_HexNAc": y_ions_HexNAc,
             "pep_stub_ions": stub_ions,
-            # Why this is capitalized, nobody knows.
-            "Oxonium_ions": oxonium_ions
+            "Oxonium_ions": oxonium_ions,
+            "Glycopeptide_identifier": seq_inst.get_sequence() + glycan_composition_restring
         }
         results.append(ions)
     return results
+
+
+def process_task(param, tolerance=5.0, number=20, *args, **kwargs):
+    try:
+        mass, count = param
+        sequences = generate_random_glycopeptides(mass, tolerance, tolerance, count=count * number)
+    except Exception, e:
+        sequences = []
+        print(e, mass, count)
+    return (mass, count, sequences)
+
+
+def tester(mass, tolerance=1, *args, **kwargs):
+    print(mass, tolerance, args, kwargs)
+
+if __name__ == '__main__':
+    import argparse
+    import os
+    from collections import Counter
+    from multiprocessing import cpu_count, Pool
+    from functools import partial
+    app = argparse.ArgumentParser()
+    app.add_argument("input_file")
+    app.add_argument("-t", "--tolerance", type=float, default=5.0,
+                     help="Tolerance range around the parameter mass to accept random glycopeptides")
+    app.add_argument("-n", "--number", type=int, default=20, help="Number of random glycopeptides per match")
+    app.add_argument("-o", "--outfile", type=str, default=None, required=False)
+    app.add_argument("-c", "--cores", type=int, default=1, required=False, help="Number of cores to use")
+
+    args = app.parse_args()
+    args.cores = cpu_count() if args.cores > cpu_count() else args.cores
+    mass_list = []
+    if os.path.splitext(args.input_file)[1] == ".csv":
+        import csv
+        with open(args.input_file, 'rb') as fh:
+            reader = csv.DictReader(fh)
+            mass_list.extend(map(float, [r["Obs_Mass"] for r in reader]))
+    else:
+        with open(args.input_file, 'rb') as fh:
+            mass_list.extend(map(float, [r for r in fh]))
+
+    mass_list = map(lambda x: round(x, 4), mass_list)
+    quantities = Counter(mass_list)
+    random_sequences = {}
+    workers = Pool(args.cores)
+    # print(quantities)
+    # for mass, count in quantities.iteritems():
+    #     try:
+    #         random_sequences[str(mass) + '|' + str(count)] =\
+    #             generate_random_glycopeptides(mass, args.tolerance, args.tolerance, count=count * args.number)
+    #     except Exception, e:
+    #         print(e)
+    task = partial(process_task, tolerance=args.tolerance, number=args.number)
+    sequences = workers.map(task, quantities.iteritems(), 25)
+    print(len(sequences))
+    import pickle
+    pickle.dump(sequences, open("backup.pickle", 'wb'))
+    random_sequences = dict(random_sequences)
+    if args.outfile is None:
+        args.outfile = args.input_file[:-3] + "random-glycopeptides.fa"
+    with open(args.outfile, "w") as fh:
+        for group, sequences in random_sequences.items():
+            for enum, sequence in sequences:
+                fh.write(">" + "|".join(map(str, group)) + " " + str(enum) + "\n")
+                fh.write(sequence + '\n')
+    print(args.outfile)

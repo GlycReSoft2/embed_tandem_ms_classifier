@@ -58,7 +58,8 @@ class StubGlycopeptide:
         self.mass += Composition("H2O").mass
 
         self.oxonium_ions = [204.0864, 186.0754, 163.0601,
-                             168.0650, 138.0542, 366.1394, 274.0920, 292.1026]
+                             168.0650, 138.0542, 366.1394,
+                             274.0920, 292.1026]
 
         # The following part was to add oxonium ions based on presence of sialylation.
         # now we'll instead check if a high mannose composition has 274 or 292 and reduce score:

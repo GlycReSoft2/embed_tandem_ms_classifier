@@ -1,4 +1,5 @@
 import re
+from utils.memoize import memoize
 
 # This pattern will match an uppercase character followed by 0 or more
 # lowercase characters denoting the element/group, followed by 0 or more
@@ -24,16 +25,25 @@ name_to_mass = {
 }
 
 
+@memoize()
 def composition_to_mass(formula):
     '''Fast, low allocation mass computation'''
     mass = 0.0
-    tokens = composition_formula_pattern.findall(formula)
-    for name, count in tokens:
-        if count == '':
-            count = 1
-        else:
-            count = int(count)
-        mass += (name_to_mass[name] * count)
+    try:
+        tokens = composition_formula_pattern.findall(formula)
+    except TypeError, e:
+        print("An error ocurred with formula %s" % formula)
+        raise e
+    try:
+        for name, count in tokens:
+            if count == '':
+                count = 1
+            else:
+                count = int(count)
+            mass += (name_to_mass[name] * count)
+    except Exception, e:
+        print("An error occurred for name %s, count %s" % (name, count))
+        raise
     return mass
 
 

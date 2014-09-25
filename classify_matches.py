@@ -506,9 +506,9 @@ class ModelDiagnosticsTask(ModelTask):
 
         # True Positive, False Negative, False Positive, True Negative
         model_conf_measures = [model_conf_matrix[0, 0], model_conf_matrix
-                              [0, 1], model_conf_matrix[1, 0], model_conf_matrix[0, 1], model_conf_matrix[1, 1]]
+                              [0, 1], model_conf_matrix[1, 0], model_conf_matrix[1, 1]]
         null_conf_measures = [null_conf_matrix[0, 0], null_conf_matrix
-                             [0, 1], null_conf_matrix[1, 0], null_conf_matrix[0, 1], null_conf_matrix[1, 1]]
+                             [0, 1], null_conf_matrix[1, 0], null_conf_matrix[1, 1]]
 
         #print((self.model_frame['call'] == True).sum(), self.model_frame['call'].count())
 
