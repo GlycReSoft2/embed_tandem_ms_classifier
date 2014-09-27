@@ -1,4 +1,5 @@
 from functools import wraps
+from collections import OrderedDict
 
 
 def memoize(maxsize=1000):
@@ -25,13 +26,12 @@ def memoize_partial_sequence(maxsize=1000, slice_backs=None):
         slice_backs = [1]
 
     def deco(f):
-        memo = {}
+        memo = OrderedDict()
 
         @wraps(f)
         def func(sequence, **kwargs):
             kwds = frozenset(kwargs.items())
             key = (sequence, kwds)
-            print(key)
             if key not in memo:
                 for s in slice_backs:
                     if (sequence[:-s], kwds) in memo:
@@ -41,8 +41,9 @@ def memoize_partial_sequence(maxsize=1000, slice_backs=None):
                         break
                 else:
                     memo[key] = f(sequence, **kwargs)
-                if len(memo) >= maxsize:
-                    memo.popitem()
-            return memo[key]
+            res = memo[key]
+            if len(memo) >= maxsize:
+                memo.popitem(False)
+            return res
         return func
     return deco

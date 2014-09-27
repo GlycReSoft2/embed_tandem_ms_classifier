@@ -15,9 +15,10 @@ from structure import modification
 from structure import residue
 from structure import glycan_masses as glycan_masses_provider
 
-glycan_masses = glycan_masses_provider.load_from_file()
+mammalian_glycans = glycan_masses_provider.load_from_file()
 
 residue_symbols = residue.symbol_to_residue
+smallest_mass = sequence_to_mass("G")
 
 
 def generate_n_linked_sequons():
@@ -27,22 +28,32 @@ def generate_n_linked_sequons():
     return sequons
 
 
-def generate_component_set(allowed_modifications, modifications_fully_random=False):
-    components = list(residue_symbols)
-    for mod in allowed_modifications:
+def generate_component_set(constant_modifications, variable_modifications):
+    components = set(residue_symbols)
+    const_modified = set()
+    for mod in constant_modifications:
         for symbol, name in residue_symbols.items():
             if mod.valid_site(name):
-                # If considering all possible modifications, the number of modifications gets
-                # a bit ridiculous, so don't include absolutely everything.
-                if (modifications_fully_random and random.random() > .2) or (not modifications_fully_random):
-                    components.append(symbol + "(" + mod.serialize() + ")")
+                components.add(symbol + "(" + mod.serialize() + ")")
+                const_modified.add(symbol)
+
+    # After applying constant modifications, we can't have the same residue unmodified, so
+    # remove it from the component set.
+    map(components.discard, const_modified)
+
+    for mod in variable_modifications:
+        for symbol, name in residue_symbols.items():
+            if mod.valid_site(name):
+                components.add(symbol + "(" + mod.serialize() + ")")
+
+    components = list(components)
     return components
 
 
 def find_n_linked_glycosites(sequence):
-    matches = re.finditer(r"[^\)]N[^\(P][ST]", sequence)
+    matches = re.finditer(r"N[^\(P][ST]", sequence)
     # Glycan is attached to the N, which is the second position in the pattern
-    sites = [m.start() + 1 for m in matches]
+    sites = [m.start() for m in matches]
     return sites
 
 
@@ -50,18 +61,44 @@ def is_glycosylated(sequence):
     return bool(re.search("Glycan", sequence))
 
 
-def generate_random_glycoforms(sequence):
+def partition(sequence, indices, offset=0):
+    if len(indices) == 0:
+        return [sequence]
+    segments = []
+    current_segment = ""
+    seq_iter = 0
+    segment_iter = 0
+    current_split = indices[segment_iter]
+    while(seq_iter < len(sequence) and segment_iter < len(indices)):
+        char = sequence[seq_iter]
+        current_segment += char
+        if seq_iter >= current_split + offset:
+            segments.append(current_segment)
+            current_segment = ""
+            segment_iter += 1
+            if segment_iter < len(indices):
+                current_split = indices[segment_iter]
+                assert(current_split != len(sequence))
+            else:
+                segments.append(sequence[seq_iter + 1:])
+        seq_iter += 1
+    return segments
+
+
+def generate_random_glycoforms(sequence, glycans):
     glycoforms = []
     glyco_sites = find_n_linked_glycosites(sequence)
     for n_sites_iter in range(len(glyco_sites)):
         for instance_sites in itertools.combinations(glyco_sites, n_sites_iter):
-            glycan = random.choice(glycan_masses)
-            glycans_to_add = [modification.AnonymousModificationRule("Glycan" + glycan[1], glycan[0])
+            glycan = random.choice(glycans)
+            glycans_to_add = [glycan.as_modification()
                               for s in instance_sites]
-            mod_seq = sequence
+            mod_seq = ""
+            segments = partition(sequence, instance_sites)
             for within_site_iter in range(len(instance_sites)):
-                pos = instance_sites[within_site_iter] + 1
-                mod_seq = mod_seq[:pos] + "(" + glycans_to_add[within_site_iter].serialize() + ")" + mod_seq[pos:]
+                glycan_str = "(%s)" % glycans_to_add[within_site_iter].serialize()
+                mod_seq += segments[within_site_iter] + glycan_str
+            mod_seq += segments[-1]
             glycoforms.append(mod_seq)
     return glycoforms
 
@@ -95,23 +132,29 @@ def evaluate_sequence(sequence, target_mass, lower_bound, upper_bound):
 
 
 def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
-                                  count=20, allowed_modifications=None, glycan_map=None):
+                                  count=20, constant_modifications=None,
+                                  variable_modifications=None, glycans=None):
     '''
     Given a target mass value and a tolerance threshold around it, create a set of random glycopeptides
     that satisfy the mass requirements.
     '''
-    if glycan_map is None:
-        glycan_map = dict()
-    modifications_fully_random = False
-    if allowed_modifications is None:
-        modifications_fully_random = True
-        allowed_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+    if glycans is None:
+        glycans = mammalian_glycans
+    if constant_modifications is None:
+        constant_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
     else:
-        allowed_modifications = copy.deepcopy(allowed_modifications)
-    allowed_modifications = [mod for mod in allowed_modifications if mod.name != "HexNAc"]
-    components = generate_component_set(allowed_modifications, modifications_fully_random)
+        constant_modifications = copy.deepcopy(constant_modifications)
+
+    if variable_modifications is None:
+        variable_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+    else:
+        variable_modifications = copy.deepcopy(variable_modifications)
+
+    variable_modifications = [mod for mod in variable_modifications if mod.name != "HexNAc"]
+    constant_modifications = [mod for mod in constant_modifications if mod.name != "HexNAc"]
+
+    components = generate_component_set(constant_modifications, variable_modifications)
     components.extend(generate_n_linked_sequons())
-    #building_sequences = components[:]
     building_sequences = map(''.join, itertools.product(components[:], repeat=2))
 
     accepted_sequences = []
@@ -142,7 +185,7 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
         building_sequences = []
         for sequence in itertools.product(next_sequences, components):
             sequence = ''.join(sequence)
-            sequence_realizations = [sequence] + generate_random_glycoforms(sequence)
+            sequence_realizations = [sequence] + generate_random_glycoforms(sequence, glycans)
             for sequence_inst in sequence_realizations:
                 try:
                     mass = sequence_to_mass(sequence_inst)
@@ -159,7 +202,7 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
 
                 # Decide whether the current sequence can be used to build a
                 # longer possible solution
-                if mass < (target_mass + upper_bound):
+                if mass < (target_mass + upper_bound - smallest_mass):
                     building_sequences.append(sequence_string)
 
                 # If this sequence has a lower mass than the smallest mass observed,
@@ -175,6 +218,122 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
         accepted_sequences = random.sample(accepted_sequences, count)
     print(time.time() - start_time)
     return accepted_sequences
+
+
+def generate_random_glycopeptides2(target_mass, lower_bound, upper_bound, count, components):
+    building_sequences = map(''.join, itertools.product(components[:], repeat=2))
+
+    accepted_sequences = []
+
+    # Tracks each pass's minimum mass observed. If the minimum mass observed exceeds
+    # the maximum acceptable mass, we've run out of solutions.
+    min_mass = 0.0
+    last_time = start_time = time.time()
+    resets = 0
+    while resets < 3 and len(accepted_sequences) < count:
+        next_time = time.time()
+        print(len(accepted_sequences), min_mass, next_time - last_time)
+        last_time = next_time
+
+        # If we've not filled the quota, reset and start building a new solution set.
+        if min_mass > (target_mass + upper_bound):
+            building_sequences = map(''.join, itertools.product(components[:], repeat=2))
+            resets += 1
+        # Keep the number of random sequences in memory down
+        current_min_mass = float('inf')
+        try:
+            random.shuffle(building_sequences)
+            building_sequences = random.sample(building_sequences, 5000)
+        except:
+            pass
+        random.shuffle(components)
+        next_sequences = building_sequences
+        building_sequences = []
+        for sequence in itertools.product(next_sequences, components):
+            sequence_inst = ''.join(sequence)
+            try:
+                mass = sequence_to_mass(sequence_inst)
+            except Exception, e:
+                print("An error occurred during massing of %s" % sequence_inst)
+                print(e)
+                raise
+            # Decide whether the current sequence is a possible solution
+            if ((target_mass - lower_bound) < mass < (target_mass + upper_bound)) and\
+               is_glycosylated(sequence_inst):
+                accepted_sequences.append(sequence_inst)
+
+            # Decide whether the current sequence can be used to build a
+            # longer possible solution
+            if mass < (target_mass + upper_bound - smallest_mass):
+                building_sequences.append(sequence_inst)
+
+            # If this sequence has a lower mass than the smallest mass observed,
+            # update the smallest mass observed for this pass
+            if mass < current_min_mass:
+                current_min_mass = mass
+
+        # Update the tracking of the smallest mass observed
+        min_mass = current_min_mass
+
+    print(len(accepted_sequences))
+    if len(accepted_sequences) > count:
+        accepted_sequences = random.sample(accepted_sequences, count)
+    print(time.time() - start_time)
+    return accepted_sequences
+
+
+def build_single_random_glycopeptide(target_mass, lower_bound, upper_bound, constant_modifications=None,
+                                     variable_modifications=None, glycans=None):
+    sequence = ""
+    mass = 0
+    if glycans is None:
+        glycans = random.sample(mammalian_glycans, 25)
+    if constant_modifications is None:
+        constant_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+    else:
+        constant_modifications = copy.deepcopy(constant_modifications)
+
+    if variable_modifications is None:
+        variable_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+    else:
+        variable_modifications = copy.deepcopy(variable_modifications)
+
+    variable_modifications = [mod for mod in variable_modifications if mod.name != "HexNAc"]
+    constant_modifications = [mod for mod in constant_modifications if mod.name != "HexNAc"]
+
+    components = generate_component_set(constant_modifications, variable_modifications)
+    components.extend("%s(%s)%s" % (site[:1],
+                                    glycan.as_modification().serialize(),
+                                    site[1:]) for
+                      site, glycan in itertools.product(generate_n_linked_sequons(), glycans))
+    component_masses = map(sequence_to_mass, components)
+    last_add_mass = 0
+    last_piece_len = 0
+    sequence = random.choice(components)
+    mass = sequence_to_mass(sequence)
+    loop_count = 0
+    while (mass <= (target_mass + upper_bound)) and loop_count < 100000:
+        if(target_mass + upper_bound - mass < smallest_mass):
+            mass -= last_add_mass
+            sequence = sequence[:-last_piece_len]
+        loop_count += 1
+        remaining_mass = (target_mass + upper_bound) - mass
+        valid_components = [components[i] for i in xrange(len(components)) if component_masses[i] <= remaining_mass]
+        next_piece = random.choice(valid_components)
+        next_mass = sequence_to_mass(next_piece)
+        if (target_mass - lower_bound) <= mass <= (target_mass + upper_bound):
+            mass += next_mass
+            sequence += next_piece
+            break
+        mass += next_mass
+        last_add_mass = next_mass
+        sequence += next_piece
+        last_piece_len = len(next_piece)
+    if (target_mass - lower_bound) <= mass <= (target_mass + upper_bound) and is_glycosylated(sequence):
+        return sequence
+    else:
+        print("No valid sequence generated")
+        return None
 
 
 def random_glycopeptide_to_sequence_space(sequence):
@@ -306,24 +465,17 @@ if __name__ == '__main__':
     quantities = Counter(mass_list)
     random_sequences = {}
     workers = Pool(args.cores)
-    # print(quantities)
-    # for mass, count in quantities.iteritems():
-    #     try:
-    #         random_sequences[str(mass) + '|' + str(count)] =\
-    #             generate_random_glycopeptides(mass, args.tolerance, args.tolerance, count=count * args.number)
-    #     except Exception, e:
-    #         print(e)
     task = partial(process_task, tolerance=args.tolerance, number=args.number)
     sequences = workers.map(task, quantities.iteritems(), 25)
     print(len(sequences))
     import pickle
     pickle.dump(sequences, open("backup.pickle", 'wb'))
-    random_sequences = dict(random_sequences)
+
     if args.outfile is None:
         args.outfile = args.input_file[:-3] + "random-glycopeptides.fa"
     with open(args.outfile, "w") as fh:
-        for group, sequences in random_sequences.items():
-            for enum, sequence in sequences:
-                fh.write(">" + "|".join(map(str, group)) + " " + str(enum) + "\n")
-                fh.write(sequence + '\n')
+        for mass, count, seqs in sequences:
+            for enum, seq in enumerate(seqs):
+                fh.write(">" + "%s|%s %s\n" % (mass, count, enum))
+                fh.write(seq + '\n')
     print(args.outfile)

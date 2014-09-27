@@ -6,11 +6,11 @@ from structure.composition import Composition
 from structure.fragment import Fragment
 from structure.modification import Modification
 from structure.residue import Residue
-from utils.memoize import memoize
+from utils.memoize import memoize_partial_sequence
 
 
 # sequence must be a string and not unicode
-@memoize(15000)
+@memoize_partial_sequence(20000, [1, 3])
 def sequence_tokenizer(sequence):
     state = "aa"
     chunks = []
@@ -64,7 +64,7 @@ def strip_modifications(sequence):
     return ''.join([residue for residue, mod in tokens])
 
 
-@memoize()
+@memoize_partial_sequence(20000, [1, 3])
 def sequence_to_mass(sequence):
     '''Fast and unapologetic or validating sequence to mass'''
     mass = 0.0

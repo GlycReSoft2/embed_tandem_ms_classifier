@@ -65,8 +65,7 @@ modifications:{modifications}""".format(seq2=self.seq.get_sequence(), **self.__d
                                            site in range(num_modifications)]
             else:
                 combination_index_sites = []
-
-            common_sites = set(*combination_index_sites)
+            common_sites = set(combination_index_sites)
             glycosylation_sites = set(self.candidate_sites).difference(common_sites)
 
             if(len(common_sites) != sum(map(len, combination_index_sites)) or
