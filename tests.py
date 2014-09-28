@@ -40,6 +40,21 @@ electron_mass = 0.000549
 proton_mass = 1.00727647
 
 
+class DebuggingPipelineProgram(unittest.TestCase):
+    ms1_matching_output_file = "test_data/debug/MS1 Matches.csv"
+    glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
+    constant_modifications = ["Carbamidomethyl (C)"]
+    variable_modifications = ["Deamidated (N)", "Oxidation (M)"]
+
+    def test_1_theoretical_ion_space_step(self):
+        print("test_1_theoretical_ion_space_step")
+        theo_ions = entry_point.generate_theoretical_ion_space(
+            self.ms1_matching_output_file, self.glycosylation_sites_file,
+            self.constant_modifications, self.variable_modifications)
+        self.assertTrue(os.path.exists(theo_ions))
+        self.theoretical_ion_space_file = theo_ions
+
+
 class TestIonMatchingPipelineProgram(unittest.TestCase):
     ms1_matching_output_file = "test_data/MS1-matching-output 20131219_005.csv"
     ms2_decon_file = "test_data/YAML-input-for-MS2-20131219_005.mzML.results"

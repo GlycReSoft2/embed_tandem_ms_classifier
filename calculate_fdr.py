@@ -47,6 +47,9 @@ def main(decoy_fasta, decon_data, ms1_tolerance=1e-5, ms2_tolerance=2e-5,
         matches = [m for m in csv.DictReader(open(match_file))]
         num_decoy_matches = len(matches)
         print(num_decoy_matches)
+        total_assignments = scored_matches_count + num_decoy_matches
+        fdr = (num_decoy_matches / float(total_assignments)) * (1 + (1 / num_decoys_per_real_mass))
+        return fdr
 
 
 if __name__ == '__main__':
@@ -54,6 +57,23 @@ if __name__ == '__main__':
     app = argparse.ArgumentParser()
     app.add_argument("decoy_fasta")
     app.add_argument("decon_data")
+    app.add_argument("-s", "--scored-matches", required=True,
+                     help="Path to results of matching or a number indicating the number of 'real' matches")
 
     args = app.parse_args()
-    main(**args.__dict__)
+
+    args = args.__dict__
+    scored = args.pop("scored_matches")
+    try:
+        count = int(scored)
+    except:
+        try:
+            import pandas as pd
+            scored_table = pd.read_csv(scored)
+            count = len(scored_table.index)
+        except:
+            print("Could not determine the number of matches from %s.\
+                Could not interpret as a number or file path" % scored)
+            exit(-1)
+    args['scored_matches_count'] = count
+    main(**args)

@@ -141,7 +141,7 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
     if glycans is None:
         glycans = mammalian_glycans
     if constant_modifications is None:
-        constant_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+        constant_modifications = []
     else:
         constant_modifications = copy.deepcopy(constant_modifications)
 
@@ -156,7 +156,7 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
     components = generate_component_set(constant_modifications, variable_modifications)
     components.extend(generate_n_linked_sequons())
     building_sequences = map(''.join, itertools.product(components[:], repeat=2))
-
+    random.shuffle(building_sequences)
     accepted_sequences = []
 
     # Tracks each pass's minimum mass observed. If the minimum mass observed exceeds
@@ -221,6 +221,8 @@ def generate_random_glycopeptides(target_mass, lower_bound, upper_bound,
 
 
 def generate_random_glycopeptides2(target_mass, lower_bound, upper_bound, count, components):
+    '''Tries to include all Glycans up front rather than include them randomly in
+    generate_random_glycoforms'''
     building_sequences = map(''.join, itertools.product(components[:], repeat=2))
 
     accepted_sequences = []
@@ -282,6 +284,24 @@ def generate_random_glycopeptides2(target_mass, lower_bound, upper_bound, count,
     return accepted_sequences
 
 
+def build_multiple_random_glycopeptides(target_mass, lower_bound, upper_bound,
+                                        count=20, constant_modifications=None,
+                                        variable_modifications=None, glycans=None):
+    '''Fails to converge'''
+    i = 0
+    tries = 0
+    accepted_sequences = []
+    while(i < count, tries < 100000):
+        seq = build_single_random_glycopeptide(target_mass, lower_bound, upper_bound,
+                                               constant_modifications, variable_modifications,
+                                               glycans)
+        if seq is not None:
+            i += 1
+            accepted_sequences.append(seq)
+        tries += 1
+    return accepted_sequences
+
+
 def build_single_random_glycopeptide(target_mass, lower_bound, upper_bound, constant_modifications=None,
                                      variable_modifications=None, glycans=None):
     sequence = ""
@@ -289,7 +309,7 @@ def build_single_random_glycopeptide(target_mass, lower_bound, upper_bound, cons
     if glycans is None:
         glycans = random.sample(mammalian_glycans, 25)
     if constant_modifications is None:
-        constant_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+        constant_modifications = []
     else:
         constant_modifications = copy.deepcopy(constant_modifications)
 
@@ -332,7 +352,7 @@ def build_single_random_glycopeptide(target_mass, lower_bound, upper_bound, cons
     if (target_mass - lower_bound) <= mass <= (target_mass + upper_bound) and is_glycosylated(sequence):
         return sequence
     else:
-        print("No valid sequence generated")
+        #print("No valid sequence generated")
         return None
 
 

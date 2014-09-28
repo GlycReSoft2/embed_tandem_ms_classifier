@@ -4,6 +4,8 @@ import itertools
 from structure.modification import Modification, ModificationTable
 from structure.sequence import Sequence
 
+import IPython
+
 
 class SequenceSpace:
     """Generate all theoretical glycopeptide sequences"""
@@ -43,62 +45,45 @@ modifications:{modifications}""".format(seq2=self.seq.get_sequence(), **self.__d
 
         return modification_index_bound
 
-    def compose_sequence(self, modification_sites, num_sites):
-
+    def compose_sequence(self, modification_sites, required_glycosylation_sites):
         seq_space = []
         num_modifications = len(self.modifications)
-        modification_indices = [0] * num_modifications
-        while(True):
-            if num_modifications != 0:
-                for ind in reversed(range(num_modifications)):
-                    if(modification_indices[ind] != len(modification_sites[ind])):
-                        break
-                    else:
-                        modification_indices[ind] = 0
-                        if(ind > 0):
-                            modification_indices[ind - 1] += 1
-                # There are no modification index combinations, just return the sequence.
-                else:
-                    return seq_space
+        combination_index_sites = itertools.product(*map(lambda x: range(0, len(x)), modification_sites))
+        for modification_indices in combination_index_sites:
+            mod_sites = [modification_sites[mod_i][pos_j] for mod_i, pos_j in enumerate(modification_indices)]
 
-                combination_index_sites = [modification_sites[site][modification_indices[site]] for
-                                           site in range(num_modifications)]
-            else:
-                combination_index_sites = []
-            common_sites = set(combination_index_sites)
+            common_sites = set(itertools.chain.from_iterable(mod_sites))
             glycosylation_sites = set(self.candidate_sites).difference(common_sites)
 
-            if(len(common_sites) != sum(map(len, combination_index_sites)) or
-               (num_sites > len(glycosylation_sites))):  # Invalid Configuration
-                modification_indices[ind] += 1
+            if(len(common_sites) != sum(map(len, mod_sites)) or
+              (required_glycosylation_sites > len(glycosylation_sites))):
+                # Invalid Configuration, can't place all Glycans
                 continue
-                raise Exception("Invalid Configuration", modification_sites,
-                                modification_indices,
-                                combination_index_sites,
-                                common_sites)
 
             raw_sequence = copy.deepcopy(self.seq)
 
             for index in range(num_modifications):
-                for mod_site in modification_sites[index][modification_indices[index]]:
+                for mod_site in mod_sites[index]:
                     raw_sequence.add_modification(mod_site, self.modifications[index].rule)
 
-            for sites in itertools.combinations(glycosylation_sites, num_sites):
+            for sites in itertools.combinations(glycosylation_sites, required_glycosylation_sites):
                 temp_seq = copy.deepcopy(raw_sequence)
                 for site in sites:
                     gly_mod = Modification(ModificationTable.other_modifications["HexNAc"], site, 1)
                     temp_seq.append_modification(gly_mod)
                 seq_space.append(temp_seq)
 
-            if num_modifications == 0:
-                return seq_space
-
-            modification_indices[-1] += 1
+        return seq_space
 
     def get_theoretical_sequence(self, num_sites):
-        modification_index_bound = self.get_modification_sites()
-        sequence_space = self.compose_sequence(modification_index_bound, num_sites)
-        return sequence_space
+        try:
+            modification_index_bound = self.get_modification_sites()
+            sequence_space = self.compose_sequence(modification_index_bound, num_sites)
+            return sequence_space
+        except Exception, e:
+            print("An error occurred while building the space for %s." % self)
+            print(e)
+            raise e
 
 
 class NoSitesFoundException(Exception):

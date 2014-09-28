@@ -133,6 +133,7 @@ def generate_fragments(
         "Oxonium_ions": oxonium_ions, "pep_stub_ions": stub_ions, "bare_b_ions": b_ions, "bare_y_ions": y_ions,
         "b_ions_with_HexNAc": b_ions_HexNAc, "y_ions_with_HexNAc": y_ions_HexNAc}
 
+
 def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None, output_file=None):
     if output_file is None:
         output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
