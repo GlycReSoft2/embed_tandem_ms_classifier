@@ -180,7 +180,8 @@ def compute_ion_coverage_map(row):
     mean_coverage = total_coverage.mean() / float(peptide_length)
 
     hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1])
-    mean_hexnac_coverage = hexnac_coverage.mean() / float(peptide_length)
+    # The denominator factor here needs to be looked at more closely.
+    mean_hexnac_coverage = hexnac_coverage.mean() / (float(peptide_length)/2.0)
 
     return pd.Series({"meanCoverage": mean_coverage,
                      "percentUncovered": percent_uncovered,
@@ -390,6 +391,7 @@ class PrepareModelTask(ModelTask):
         self.model_frame['call'] = calls
         self.model_frame = determine_ambiguity(self.model_frame)
         self.model_frame['MS2_Score'] = 0.0
+        self.model_frame['noise_filter'] = 0.0
 
     def save_model(self):
         save_model_file(self.model_frame, self.output_path)
@@ -433,7 +435,8 @@ class ClassifyTargetWithModelTask(ModelTask):
     def classify_with_model(self):
         scores = classify_with_model(
             self.classifier, self.target_frame, self.model_formula)
-        self.target_frame["MS2_Score"] = scores
+        self.target_frame["noise_filter"] = scores
+        self.target_frame["MS2_Score"] = scores * (self.target_frame.meanCoverage - self.target_frame.percentUncovered)
         self.target_frame = determine_ambiguity(self.target_frame)
         self.target_frame['call'] = scores > 0.5
 

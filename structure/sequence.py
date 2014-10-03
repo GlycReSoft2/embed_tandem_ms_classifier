@@ -66,7 +66,7 @@ def strip_modifications(sequence):
 
 @memoize_partial_sequence(20000, [1, 3])
 def sequence_to_mass(sequence):
-    '''Fast and unapologetic or validating sequence to mass'''
+    '''Fast and un-apologetic or -validating sequence to mass'''
     mass = 0.0
     tokens = sequence_tokenizer(sequence)
     for residue, mod in tokens:
@@ -212,7 +212,6 @@ class Sequence(PeptideSequenceBase):
 
         mod = Modification(rule=mod_type, mod_pos=pos)
         self.seq[pos][1].append(mod)
-        # self.add_mass(pos,mod.mass)
         self.mass += mod.mass
 
     def append_modification(self, mod):
@@ -222,7 +221,6 @@ class Sequence(PeptideSequenceBase):
 
         pos = mod.position
         self.seq[pos][1].append(mod)
-        # self.add_mass(pos,mod.mass)
         self.mass += mod.mass
 
     def get_sequence(self, start=0):

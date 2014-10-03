@@ -28,8 +28,8 @@ Electron = 0.000549
 Water = 18.0105647000
 Proton = 1.007276035
 
-ms1_tolerance_default = 0.00001
-ms2_tolerance_default = 0.00002
+ms1_tolerance_default = 10e-6
+ms2_tolerance_default = 20e-6
 
 
 def Mergedicts(dicts_to_merge):
@@ -232,7 +232,7 @@ def split_decon_data_by_index(decon_data, splitting_index):
     matched = []
     no_matched = []
     for i, scan in enumerate(decon_data['peaks']):
-        count = splitting_index.get(i)
+        count = splitting_index[i]
         scan["__matches"] = count
         if count != 0:
             matched.append(scan)
@@ -267,7 +267,13 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
     results = []
     did_match_cache = Counter()
     # reading each line in theoretical ions file generated from gly1 results
-    for lines in f_csv:
+    for line_no, lines in enumerate(f_csv):
+        try:
+            obs_mass = float(lines['Obs_Mass'])
+        except:
+            print(lines["Obs_Mass"], line_no)
+            print(lines)
+            raise
         for tandem_ms_ind, more in enumerate(data['peaks']):
             more['_iterkey'] = tandem_ms_ind
             real_ions = []
@@ -282,8 +288,6 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                 charge = num['z']
                 mass = num['mz']
                 ntr_mass = ((mass * charge) - (charge * Proton))
-
-                obs_mass = float(lines['Obs_Mass'])
                 ppm = ((ntr_mass - obs_mass) / ntr_mass)
 
             if math.fabs(ppm) <= ms1_tolerance:
@@ -417,7 +421,8 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
         "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
         "bare_b_ions", "possible_b_ions_HexNAc", "total_b_ions", "bare_y_ions", "possible_y_ions_HexNAc",
         "total_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage",
-        "Stub_ions", "scan_id"]
+        "Stub_ions", "scan_id"
+    ]
     f = open(outfile + '.csv', 'wb')
     dict_writer = csv.DictWriter(f, keys)
     dict_writer.writer.writerow(keys)

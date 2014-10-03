@@ -1,79 +1,159 @@
 import csv
 import itertools
+import random
+import functools
 
-import random_glycopeptide
+from collections import defaultdict
+
+import pandas as pd
+
+from random_glycopeptide import random_glycopeptide_to_sequence_space
 import classify_matches
 import match_ions
+import postprocess
+from structure.sequence import Sequence
 
 
-def filter_fn(operating_data):
-    ind = (operating_data.numStubs > 0) & \
-        (operating_data.meanCoverage > 0.0) & \
-        (operating_data.meanHexNAcCoverage > 0.0) & \
-        (operating_data.MS2_Score > 0.5)
-    return ind
+def make_predicate(**kwargs):
+    return functools.partial(predicate_base, **kwargs)
 
 
-def load_decoys_from_fasta(fasta_file_handle):
-    '''Reads decoys from a FASTA format file, yielding them as an iterator'''
-    defline = ''
-    seq = ''
-    try:
-        while(True):
-            # defline is unused
-            defline = fasta_file_handle.next()
-            seq = fasta_file_handle.next().replace("\n", "").replace("\r", "")
-            yield dict(defline=defline, sequence=seq)
-    except StopIteration:
-        pass
+def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0, vol=0,
+                   peptideLens=0, Obs_Mass=0):
+    return (x.MS2_Score > MS2_Score) & (x.meanCoverage > meanCoverage) & (x.percentUncovered < percentUncovered) &\
+           (x.MS1_Score > MS1_Score) & (x.vol > vol) & (x.peptideLens > peptideLens) & (x.Obs_Mass > Obs_Mass)
 
 
-def generate_theoretical_ions(fasta_file_path):
-    ions = []
-    for decoy in load_decoys_from_fasta(open(fasta_file_path)):
-        ions.extend(random_glycopeptide.random_glycopeptide_to_sequence_space(decoy["sequence"]))
-    return ions
+def build_shuffle_seqs(scored_matches, count=20):
+    split_sequence = scored_matches.Glycopeptide_identifier.str.split(r"([^\[]+)(\[.*\])")
+    split_sequence_frame = pd.DataFrame(split_sequence.tolist(), columns=["X", "peptide_sequence", "glycan", "Y"])
+    split_sequence_frame["seq_obj"] = split_sequence_frame.peptide_sequence.apply(Sequence)
+    shuffles = defaultdict(set)
+    for ind, row in split_sequence_frame.iterrows():
+        solutions = shuffles[ind]
+        mass = scored_matches.Obs_Mass[ind]
+        ppm_error = scored_matches.ppm_error[ind]
+        ms1_score = scored_matches.MS1_Score[ind]
+        glycan = row.glycan
+        seq_obj = row.seq_obj
+        solutions.add((row.peptide_sequence, glycan, mass, ppm_error, ms1_score))
+        while(len(solutions) < count + 1):
+            clone = seq_obj.clone()
+            random.shuffle(clone)
+            solutions.add((clone.get_sequence(), glycan, mass, ppm_error, ms1_score))
+        solutions.discard((row.peptide_sequence, glycan, mass, ppm_error, ms1_score))
+    return shuffles
 
 
-def main(decoy_fasta, decon_data, ms1_tolerance=1e-5, ms2_tolerance=2e-5,
-         scored_matches_count=0, num_decoys_per_real_mass=20.0):
-        tempfile_name = "___temp_decoy_ion_space.csv"
-        decoy_ions = generate_theoretical_ions(decoy_fasta)
-        fh = open("___temp_decoy_ion_space.csv", "wb")
-        w = csv.DictWriter(fh, decoy_ions[0].keys())
-        w.writeheader()
-        w.writerows(decoy_ions)
-        match_file = match_ions.match_frags(tempfile_name, decon_data, ms1_tolerance, ms2_tolerance)
-        matches = [m for m in csv.DictReader(open(match_file))]
-        num_decoy_matches = len(matches)
-        print(num_decoy_matches)
-        total_assignments = scored_matches_count + num_decoy_matches
-        fdr = (num_decoy_matches / float(total_assignments)) * (1 + (1 / num_decoys_per_real_mass))
-        return fdr
+def calculate_fdr(scored_matches_frame, decoy_matches_frame, predicate_fn=lambda x: x.MS2_Score > 0.5,
+                  num_decoys_per_real_mass=20.0):
+    pred_passed = scored_matches_frame.apply(predicate_fn, 1)
+    decoy_passed = decoy_matches_frame.apply(predicate_fn, 1)
+    n_pred_passed = sum(pred_passed)
+    n_decoy_passed = sum(decoy_passed)
+    total_assignments = n_pred_passed + n_decoy_passed
+    fdr = (n_decoy_passed / float(total_assignments)) * (1 + (1 / float(num_decoys_per_real_mass)))
+    results_obj = {
+        "num_real_matches": n_pred_passed,
+        "num_decoy_matches": n_decoy_passed,
+        "decoy_to_real_ratio": num_decoys_per_real_mass,
+        "false_discovery_rate": fdr,
+        "predicted_database": None,
+        "decoy_database": None,
+        "searched_spectra": None,
+        "threshold": (getattr(predicate_fn, "keywords", None))
+    }
+    return results_obj
+
+
+def generate_decoy_match_results(scored_matches_path, decon_data, model_file_path, ms1_tolerance=1e-5,
+                                 ms2_tolerance=2e-5, num_decoys_per_real_mass=20.0,
+                                 method="full",
+                                 method_init_args=None, method_fit_args=None):
+    scored_matches_frame = classify_matches.prepare_model_file(scored_matches_path)
+    decoy_file_name = scored_matches_path[:-4] + ".decoy.ion_space.csv"
+    random_sequences = build_shuffle_seqs(scored_matches_frame, int(num_decoys_per_real_mass))
+    fh = open(decoy_file_name, "wb")
+    fragments = (random_glycopeptide_to_sequence_space(*decoy) for
+                 decoy in itertools.chain.from_iterable(random_sequences.values()))
+    # Fetch the first fragment set for headers
+    frag_sample = fragments.next()
+    writer = csv.DictWriter(fh, frag_sample.keys())
+    # Write out fragments
+    writer.writeheader()
+    writer.writerow(frag_sample)
+    writer.writerows(fragments)
+    fh.close()
+    print(decoy_file_name)
+    match_file = match_ions.match_frags(decoy_file_name, decon_data, ms1_tolerance, ms2_tolerance)
+    print(match_file)
+    postprocess_file = postprocess.main(match_file)
+    print(postprocess_file)
+    classifier = classify_matches.ClassifyTargetWithModelTask(model_file_path, postprocess_file,
+                                                              method=method,
+                                                              method_init_args=method_init_args,
+                                                              method_fit_args=method_fit_args)
+    decoy_matches_path = classifier.run()
+    return decoy_matches_path
+
+
+def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_matches_path=None,
+         outfile_path=None, ms1_tolerance=1e-5, ms2_tolerance=2e-5,
+         num_decoys_per_real_mass=20.0, predicate_fns=(make_predicate(MS2_Score=0.5),),
+         method="full", method_init_args=None,
+         method_fit_args=None):
+
+    '''
+        Call with deconvolution results and a model to generate decoys and score them, or with
+        a pre-existing decoy database.
+
+        :param predicate_fns iterable: containing functions with which to partition both the
+        "real" and "decoy" databases. Use `make_predicate` with keyword arguments matching column
+        names and numeric thresholds for ease of use and documentation.
+
+        :param outfile_path str: defaults to scored_matches_path[:-4] + "_fdr.csv" will contain the
+        resulting FDR statistic for each cutoff.
+    '''
+
+    if outfile_path is None:
+        outfile_path = scored_matches_path[:-4] + "_fdr.csv"
+    if decon_data is not model_file_path is not None:
+        decoy_matches_path = generate_decoy_match_results(
+            scored_matches_path, decon_data, model_file_path, ms1_tolerance=ms1_tolerance,
+            ms2_tolerance=ms2_tolerance, num_decoys_per_real_mass=num_decoys_per_real_mass,
+            method=method, method_init_args=method_init_args, method_fit_args=method_fit_args
+        )
+    scored_matches_frame = classify_matches.prepare_model_file(scored_matches_path)
+    decoy_matches_frame = classify_matches.prepare_model_file(decoy_matches_path)
+    results = []
+    for predicate in predicate_fns:
+        results_obj = calculate_fdr(scored_matches_frame, decoy_matches_frame, predicate, num_decoys_per_real_mass)
+        results_obj['predicted_database'] = scored_matches_path
+        results_obj['decoy_database'] = decoy_matches_path
+        results.append(results_obj)
+
+    results_fh = open(outfile_path, 'wb')
+    results_writer = csv.DictWriter(results_fh, results[0].keys())
+    results_writer.writeheader()
+    results_writer.writerows(results)
+    results_fh.close()
+    return results
 
 
 if __name__ == '__main__':
     import argparse
     app = argparse.ArgumentParser()
-    app.add_argument("decoy_fasta")
-    app.add_argument("decon_data")
-    app.add_argument("-s", "--scored-matches", required=True,
-                     help="Path to results of matching or a number indicating the number of 'real' matches")
+    app.add_argument("--decon_data", default=None, help="MS2 deconvolution output file path")
+    app.add_argument("--model_file", default=None, help="The model to train a classifier on for scoring decoys")
+    app.add_argument("-d", "--decoy_matches", default=None, required=False, help="Path to decoy matches\
+                     that have already been generated")
+    app.add_argument("-s", "--scored_matches", required=True,
+                     help="Path to results of matching")
 
     args = app.parse_args()
 
-    args = args.__dict__
-    scored = args.pop("scored_matches")
-    try:
-        count = int(scored)
-    except:
-        try:
-            import pandas as pd
-            scored_table = pd.read_csv(scored)
-            count = len(scored_table.index)
-        except:
-            print("Could not determine the number of matches from %s.\
-                Could not interpret as a number or file path" % scored)
-            exit(-1)
-    args['scored_matches_count'] = count
-    main(**args)
+    # predicates = defaultdict(list)
+    # for pred in args.predicate:
+    #     predicates[pred.get("name", None)].append(pred)
+
+    main(args.scored_matches, args.decon_data, args.model_file, args.decoy_matches)

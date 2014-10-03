@@ -36,7 +36,7 @@ class SimpleGlycan(tuple):
         return results
 
     def __getnewargs__(self):
-        'Return self as a plain tuple.   Used by copy and pickle.'
+        'Return self as a plain tuple. Used by copy and pickle.'
         return tuple(self)
 
     __dict__ = property(_asdict)

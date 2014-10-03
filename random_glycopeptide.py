@@ -144,14 +144,17 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
     loc_sequence_to_mass = sequence_to_mass
     loc_fabs = fabs
     loc_gen_glycoforms = generate_random_glycoforms
+    joiner = ''.join
 
     variable_modifications = [mod for mod in variable_modifications if mod.name != "HexNAc"]
     constant_modifications = [mod for mod in constant_modifications if mod.name != "HexNAc"]
 
     components = generate_component_set(constant_modifications, variable_modifications)
     amino_acid_components = components[:]
-    amino_acid_components =  map(''.join, itertools.product(amino_acid_components, repeat=8))
+    amino_acid_components = set(map(''.join, itertools.product(amino_acid_components + [""], repeat=4)))
     components.extend(generate_n_linked_sequons())
+    smallest_mass = min(map(sequence_to_mass, components))
+
     building_sequences = map(''.join, itertools.product(cleavage_start, components, components))
     random.shuffle(building_sequences)
     accepted_sequences = set()
@@ -164,18 +167,20 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
     while resets < 3 and len(accepted_sequences) < count:
         next_time = time.time()
         print(len(accepted_sequences), min_mass, next_time - last_time)
+        for seq in accepted_sequences:
+            print(seq)
         last_time = next_time
 
         # If we've not filled the quota, reset and start building a new solution set.
         if loc_fabs((min_mass - target_mass) / float(target_mass)) > ppm_error and min_mass > target_mass:
-            building_sequences = map(''.join, itertools.product(cleavage_start, components, components))
+            building_sequences = map(joiner, itertools.product(cleavage_start, components, components))
             resets += 1
             print("Reset!")
 
         # Keep the number of random sequences in memory down
         current_min_mass = float('inf')
         try:
-            random.shuffle(building_sequences)
+            #random.shuffle(building_sequences)
             building_sequences = random.sample(building_sequences, 10000)
         except:
             pass
@@ -186,9 +191,10 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
 
         building_sequences = []
         append_build = building_sequences.append
+        extend_build = building_sequences.extend
         # Consider every currently growing sequence combined with every possible amino acid building block
         for sequence in itertools.product(next_sequences, components):
-            sequence = ''.join(sequence)
+            sequence = joiner(sequence)
             missed_cleavages = count_missed_cleavages(sequence, cleavage_end)
             if missed_cleavages > max_missed_cleavages:
                 continue
@@ -201,23 +207,26 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
                     print("An error occurred during massing of %s" % sequence_inst)
                     print(e)
                     raise
-                accepted = False
                 for sequence_inst_capped in itertools.product([sequence_inst], cleavage_end):
                     inst_mass = mass + loc_sequence_to_mass(sequence_inst_capped[1])
                     # Decide whether the current sequence is a possible solution
                     error = loc_fabs((inst_mass - target_mass) / float(target_mass))
                     if error < ppm_error and is_glycosylated(sequence_inst):
-                        accepted = True
-                        accept("".join(sequence_inst_capped))
-                # Decide whether the current sequence can be used to build a
-                # longer possible solution
-                if not accepted and mass < target_mass:
+                        accepted = joiner(sequence_inst_capped)
+                        print(accepted)
+                        accept(accepted)
+            # Decide whether the current sequence can be used to build a
+            # longer possible solution. Don't save glycoforms.
+            if (mass + smallest_mass) < target_mass:
+                if(mass < (target_mass/2)):
+                    extend_build(joiner(p) for p in itertools.product([sequence_inst], amino_acid_components))
+                else:
                     append_build(sequence_inst)
 
-                # If this sequence has a lower mass than the smallest mass observed,
-                # update the smallest mass observed for this pass
-                if mass < current_min_mass:
-                    current_min_mass = mass
+            # If this sequence has a lower mass than the smallest mass observed,
+            # update the smallest mass observed for this pass
+            if mass < current_min_mass:
+                current_min_mass = mass
 
             # Update the tracking of the smallest mass observed
             min_mass = current_min_mass
@@ -229,13 +238,14 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
     return accepted_sequences
 
 
-def random_glycopeptide_to_sequence_space(sequence):
+# Mass is not being passed quite right yet.
+def random_glycopeptide_to_sequence_space(sequence, glycan_string=None, obs_mass=None, ppm_error=0, ms1_score=0):
     seq_obj = Sequence(sequence)
     glycan_map = {}
     modifications = []
     for i, (aa, mods) in enumerate(seq_obj):
         for mod in mods:
-            if "Glycan" in mod.name:
+            if mod.name in {"Glycan", "HexNAc"}:
                 glycan_map[i] = mod.name
             else:
                 # Construct the set of acceptable reasons why this modification is here.
@@ -245,74 +255,75 @@ def random_glycopeptide_to_sequence_space(sequence):
 
     # Remove glycans from the sequence string to conform to the SequenceSpace expectations
     for site, glycan in glycan_map.items():
-        seq_obj.drop_modification(site, glycan)
+        # Don't discard anonymous HexNAcs. Downstream functions can handle them
+        if glycan != "HexNAc":
+            seq_obj.drop_modification(site, glycan)
     glycosylation_sites = glycan_map.keys()
-    # Build the semicolon separated string for glycan compositions
-    glycan_composition = []
-    glycan_composition = [map(int, glycan.replace("Glycan", '').replace("[", "").replace("]", "").split(";"))
-                          for glycan in glycan_map.values()]
-    glycan_composition = map(sum, zip(*glycan_composition))
-    glycan_composition_restring = "[" + ";".join(map(str, glycan_composition)) + "]"
+    if glycan_string is None:
+        # Build the semicolon separated string for glycan compositions
+        glycan_composition = []
+        glycan_composition = [map(int, glycan.replace("Glycan", '').replace("[", "").replace("]", "").split(";"))
+                              for glycan in glycan_map.values()]
+        glycan_composition = map(sum, zip(*glycan_composition))
+        glycan_composition_restring = "[" + ";".join(map(str, glycan_composition)) + "]"
+    else:
+        glycan_composition_restring = glycan_string
+    # Begin generating fragment ions
+    b_type = seq_obj.get_fragments('B')
+    b_ions = []
+    b_ions_HexNAc = []
+    for b in b_type:
+        for fm in b:
+            key = fm.get_fragment_name()
+            if key == "B1" or re.search(r'B1\+', key):
+                # B1 Ions aren't actually seen in reality, but are an artefact of the generation process
+                # so do not include them in the output
+                continue
+            mass = fm.get_mass()
+            if "HexNAc" in key:
+                b_ions_HexNAc.append({"key": key, "mass": mass})
+            else:
+                b_ions.append({"key": key, "mass": mass})
 
-    sequence_space = SequenceSpace(seq_obj.get_sequence(), None, glycosylation_sites, modifications)
-    results = []
-    for seq_inst in sequence_space.get_theoretical_sequence(len(glycosylation_sites)):
-        b_type = seq_inst.get_fragments('B')
-        b_ions = []
-        b_ions_HexNAc = []
-        for b in b_type:
-            for fm in b:
-                key = fm.get_fragment_name()
-                if key == "B1" or re.search(r'B1\+', key):
-                    # B1 Ions aren't actually seen in reality, but are an artefact of the generation process
-                    # so do not include them in the output
-                    continue
-                mass = fm.get_mass()
-                if "HexNAc" in key:
-                    b_ions_HexNAc.append({"key": key, "mass": mass})
-                else:
-                    b_ions.append({"key": key, "mass": mass})
+    y_type = seq_obj.get_fragments('Y')
+    y_ions = []
+    y_ions_HexNAc = []
+    for y in y_type:
+        for fm in y:
+            key = fm.get_fragment_name()
+            mass = fm.get_mass()
+            if "HexNAc" in key:
+                y_ions_HexNAc.append({"key": key, "mass": mass})
+            else:
+                y_ions.append({"key": key, "mass": mass})
 
-        y_type = seq_inst.get_fragments('Y')
-        y_ions = []
-        y_ions_HexNAc = []
-        for y in y_type:
-            for fm in y:
-                key = fm.get_fragment_name()
-                mass = fm.get_mass()
-                if "HexNAc" in key:
-                    y_ions_HexNAc.append({"key": key, "mass": mass})
-                else:
-                    y_ions.append({"key": key, "mass": mass})
-
-        peptide_seq = strip_modifications(seq_inst.get_sequence())
-        pep_stubs = StubGlycopeptide(peptide_seq, None,
-                                     len(glycosylation_sites), glycan_composition_restring)
-        stub_ions = pep_stubs.get_stubs()
-        oxonium_ions = pep_stubs.get_oxonium_ions()
-        ions = {
-            "MS1_Score": None,
-            "Obs_Mass": seq_inst.get_mass(),
-            "Calc_mass": None,
-            "ppm_error": None,
-            "Peptide": peptide_seq,
-            "Peptide_mod": None,
-            "Glycan": glycan_composition_restring,
-            "vol": None,
-            "glyco_sites": len(glycan_map),
-            "startAA": None,
-            "endAA": None,
-            "Seq_with_mod": seq_inst.get_sequence(),
-            "bare_b_ions": b_ions,
-            "b_ions_with_HexNAc": b_ions_HexNAc,
-            "bare_y_ions": y_ions,
-            "y_ions_with_HexNAc": y_ions_HexNAc,
-            "pep_stub_ions": stub_ions,
-            "Oxonium_ions": oxonium_ions,
-            "Glycopeptide_identifier": seq_inst.get_sequence() + glycan_composition_restring
-        }
-        results.append(ions)
-    return results
+    peptide_seq = strip_modifications(seq_obj.get_sequence())
+    pep_stubs = StubGlycopeptide(peptide_seq, None,
+                                 len(glycosylation_sites), glycan_composition_restring)
+    stub_ions = pep_stubs.get_stubs()
+    oxonium_ions = pep_stubs.get_oxonium_ions()
+    ions = {
+        "MS1_Score": ms1_score,
+        "Obs_Mass": obs_mass if obs_mass is not None else seq_obj.get_mass(),
+        "Calc_mass": None,
+        "ppm_error": ppm_error,
+        "Peptide": peptide_seq,
+        "Peptide_mod": None,
+        "Glycan": glycan_composition_restring,
+        "vol": None,
+        "glyco_sites": len(glycan_map),
+        "startAA": None,
+        "endAA": None,
+        "Seq_with_mod": seq_obj.get_sequence(),
+        "bare_b_ions": b_ions,
+        "b_ions_with_HexNAc": b_ions_HexNAc,
+        "bare_y_ions": y_ions,
+        "y_ions_with_HexNAc": y_ions_HexNAc,
+        "pep_stub_ions": stub_ions,
+        "Oxonium_ions": oxonium_ions,
+        "Glycopeptide_identifier": seq_obj.get_sequence() + glycan_composition_restring
+    }
+    return ions
 
 
 def process_task(param, tolerance=5.0, number=20, *args, **kwargs):

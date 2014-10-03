@@ -25,6 +25,8 @@ try:
     from structure.sequence_space import UnqualifiedModifierException
     from structure.sequence_space import NoSitesFoundException
 
+    from protein_prospector.xml_parser import MSDigestParamters
+
     import theoretical_glycopeptide
     import match_ions
     import postprocess
@@ -212,6 +214,8 @@ def main():
         "--ms2-match-tolerance", type=float, action="store",
         default=match_ions.ms2_tolerance_default,
         help="Mass Error Tolerance for matching MS2 masses in PPM")
+    build_model_app.add_argument("--protein-prospector-xml", default=None, help="Parse out modification\
+                                 information form the Protein Prospector XML output")
     build_model_app.add_argument(
         "--constant-modification-list", type=str, action="append", default=None,
         help="Pass the list of constant modifications to include in the sequence search space")
@@ -247,6 +251,8 @@ def main():
         "--ms2-match-tolerance", type=float, action="store",
         default=match_ions.ms2_tolerance_default,
         help="Mass Error Tolerance for matching MS2 masses in PPM")
+    classify_with_model_app.add_argument("--protein-prospector-xml", default=None, help="Parse out modification\
+                                 information form the Protein Prospector XML output")
     classify_with_model_app.add_argument(
         "--constant-modification-list", type=str, action="append", default=None,
         help="Pass the list of constant modifications to include in the sequence search space")
@@ -275,6 +281,7 @@ def main():
         args = args.__dict__
         func = args.pop("func")
         debug = args.pop("debug", False)
+
         if 'constant_modification_list' in args:
             args['constant_modification_list'] = uri_decode_list(
                 args['constant_modification_list'])
@@ -282,6 +289,11 @@ def main():
         if 'variable_modification_list' in args:
             args['variable_modification_list'] = uri_decode_list(
                 args['variable_modification_list'])
+
+        if 'protein-prospector-xml' in args:
+            ms_digest = MSDigestParamters.parse(args["protein-prospector-xml"])
+            args["constant_modification_list"] = ms_digest.constant_modifications
+            args["variable_modification_list"] = ms_digest.variable_modifications
 
         param_file = args.pop("parameter_file", None)
         if param_file is not None:
