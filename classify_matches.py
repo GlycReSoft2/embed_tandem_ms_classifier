@@ -108,7 +108,13 @@ def get_sequence_length(data):
 def prepare_model_file(path):
     data = pd.read_csv(path)
     deserialize_compound_fields(data)
-    data.Peptide_mod = data.Peptide_mod.astype(str).str.replace("nan", "")
+    data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
+    ix = np.isnan(data.vol)
+    data.vol.ix[ix] = -1
+    ix = np.isnan(data.startAA)
+    data.startAA.ix[ix] = -1
+    ix = np.isnan(data.endAA)
+    data.endAA.ix[ix] = -1
     data['abs_ppm_error'] = data.ppm_error.abs()
     if "peptideLens" not in data:
         data = get_sequence_length(data)

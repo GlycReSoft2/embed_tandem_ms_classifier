@@ -3,7 +3,9 @@ import unittest
 
 import csv
 
+from protein_prospector.xml_parser import MSDigestParamters
 import theoretical_glycopeptide
+import calculate_fdr
 import entry_point
 
 from structure import sequence
@@ -40,25 +42,26 @@ electron_mass = 0.000549
 proton_mass = 1.00727647
 
 
-class DebuggingPipelineProgram(unittest.TestCase):
-    ms1_matching_output_file = "test_data/debug/MS1 Matches.csv"
-    glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
-    constant_modifications = ["Carbamidomethyl (C)"]
-    variable_modifications = ["Deamidated (N)", "Oxidation (M)"]
+# class DebuggingPipelineProgram(unittest.TestCase):
+#     ms1_matching_output_file = "test_data/debug/MS1 Matches.csv"
+#     glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
+#     constant_modifications = ["Carbamidomethyl (C)"]
+#     variable_modifications = ["Deamidated (N)", "Oxidation (M)"]
 
-    def test_1_theoretical_ion_space_step(self):
-        print("test_1_theoretical_ion_space_step")
-        theo_ions = entry_point.generate_theoretical_ion_space(
-            self.ms1_matching_output_file, self.glycosylation_sites_file,
-            self.constant_modifications, self.variable_modifications)
-        self.assertTrue(os.path.exists(theo_ions))
-        self.theoretical_ion_space_file = theo_ions
+#     def test_1_theoretical_ion_space_step(self):
+#         print("test_1_theoretical_ion_space_step")
+#         theo_ions = entry_point.generate_theoretical_ion_space(
+#             self.ms1_matching_output_file, self.glycosylation_sites_file,
+#             self.constant_modifications, self.variable_modifications)
+#         self.assertTrue(os.path.exists(theo_ions))
+#         self.theoretical_ion_space_file = theo_ions
 
 
 class TestIonMatchingPipelineProgram(unittest.TestCase):
     ms1_matching_output_file = "test_data/MS1-matching-output 20131219_005.csv"
     ms2_decon_file = "test_data/YAML-input-for-MS2-20131219_005.mzML.results"
     glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
+    protein_prospector_file = "test_data/KK-USSR-digest-Prospector output.xml"
     constant_modifications = ["Carbamidomethyl (C)"]
     variable_modifications = ["Deamidated (N)", "Deamidated (Q)"]
     method = "full"
@@ -70,16 +73,24 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
     postprocessed_ions_file = "test_data/MS1-matching-output 20131219_005.processed.csv"
     model_file_path = "test_data/MS1-matching-output 20131219_005.model.csv"
     test_model_file_path = "test_data/USSRInfluenzaModel.csv"
-    classification_results_file = None
+    classification_results_file = "test_data/MS1-matching-output 20131219_005.scored.csv"
     model_eval_file = None
 
     def test_1_theoretical_ion_space_step(self):
         print("test_1_theoretical_ion_space_step")
+        ms_digest = MSDigestParamters.parse(self.protein_prospector_file)
         theo_ions = entry_point.generate_theoretical_ion_space(
             self.ms1_matching_output_file, self.glycosylation_sites_file,
-            self.constant_modifications, self.variable_modifications)
+            ms_digest.constant_modifications, ms_digest.variable_modifications)
         self.assertTrue(os.path.exists(theo_ions))
         self.theoretical_ion_space_file = theo_ions
+        sequence_set = [r for r in csv.DictReader(open(theo_ions))]
+        peptide_sequences = [sequence.Sequence(s["Seq_with_mod"]) for s in sequence_set]
+        peptide_mods = set()
+        for seq in peptide_sequences:
+            for resid, mod in seq:
+                peptide_mods.update((m.rule for m in mod))
+        print(peptide_mods)
 
     def test_2_match_ions_step(self):
         print("test_2_match_ions_step")
@@ -112,6 +123,16 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
         print("test_6_evaluate_model_step")
         self.model_eval_file = entry_point.ModelDiagnosticsTask(self.model_file_path, self.method).run()
         self.assertTrue(os.path.exists(self.model_eval_file))
+
+    def test_7_calculate_fdr_step(self):
+        print("test_7_calculate_fdr_step")
+        predicates = [calculate_fdr.make_predicate(MS2_Score=i, peptideLens=5) for i in [0.2, 0.4, 0.6, 0.8, .9]]
+        predicates.extend([calculate_fdr.make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        predicates.extend([calculate_fdr.make_predicate(MS2_Score=i, peptideLens=15) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
+                                              self.test_model_file_path,
+                                              predicate_fns=predicates)
+        self.assertTrue(os.path.exists(self.classification_results_file[:-4] + "_fdr.csv"))
 
 
 class TestTheoreticalIonSpaceProgram(unittest.TestCase):

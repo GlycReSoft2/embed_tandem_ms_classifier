@@ -18,10 +18,10 @@ def make_predicate(**kwargs):
     return functools.partial(predicate_base, **kwargs)
 
 
-def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0, vol=0,
+def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0, vol=-1,
                    peptideLens=0, Obs_Mass=0):
-    return (x.MS2_Score > MS2_Score) & (x.meanCoverage > meanCoverage) & (x.percentUncovered < percentUncovered) &\
-           (x.MS1_Score > MS1_Score) & (x.vol > vol) & (x.peptideLens > peptideLens) & (x.Obs_Mass > Obs_Mass)
+    return (x.MS2_Score >= MS2_Score) & (x.meanCoverage >= meanCoverage) & (x.percentUncovered <= percentUncovered) &\
+           (x.MS1_Score >= MS1_Score) & (x.vol >= vol) & (x.peptideLens >= peptideLens) & (x.Obs_Mass >= Obs_Mass)
 
 
 def build_shuffle_seqs(scored_matches, count=20):
@@ -151,9 +151,11 @@ if __name__ == '__main__':
                      help="Path to results of matching")
 
     args = app.parse_args()
-
+    predicates = [make_predicate(MS2_Score=i) for i in [0.2, 0.4, 0.6, 0.8, .9]]
+    predicates.extend([make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+    predicates.extend([make_predicate(MS2_Score=i, peptideLens=15) for i in [0.2, 0.4, 0.6, 0.8, .9]])
     # predicates = defaultdict(list)
     # for pred in args.predicate:
     #     predicates[pred.get("name", None)].append(pred)
 
-    main(args.scored_matches, args.decon_data, args.model_file, args.decoy_matches)
+    main(args.scored_matches, args.decon_data, args.model_file, args.decoy_matches, predicate_fns=predicates)
