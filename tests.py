@@ -130,9 +130,10 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
         predicates.extend([calculate_fdr.make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
         predicates.extend([calculate_fdr.make_predicate(MS2_Score=i, peptideLens=15) for i in [0.2, 0.4, 0.6, 0.8, .9]])
         self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
-                                              self.test_model_file_path,
+                                              self.test_model_file_path, suffix_len=1,
                                               predicate_fns=predicates)
         self.assertTrue(os.path.exists(self.classification_results_file[:-4] + "_fdr.csv"))
+        self.assertTrue(os.path.exists(self.classification_results_file[:-4] + ".decoy.ion_space.csv"))
 
 
 class TestTheoreticalIonSpaceProgram(unittest.TestCase):
