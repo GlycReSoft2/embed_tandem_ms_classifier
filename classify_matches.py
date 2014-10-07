@@ -442,7 +442,9 @@ class ClassifyTargetWithModelTask(ModelTask):
         scores = classify_with_model(
             self.classifier, self.target_frame, self.model_formula)
         self.target_frame["noise_filter"] = scores
-        self.target_frame["MS2_Score"] = scores * (self.target_frame.meanCoverage - self.target_frame.percentUncovered)
+        self.target_frame["MS2_Score"] = scores * (((self.target_frame.meanCoverage +
+                                                    self.target_frame.meanHexNAcCoverage)/2.0)
+                                                   - self.target_frame.percentUncovered)
         self.target_frame = determine_ambiguity(self.target_frame)
         self.target_frame['call'] = scores > 0.5
 

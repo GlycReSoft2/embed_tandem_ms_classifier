@@ -290,10 +290,11 @@ def main():
             args['variable_modification_list'] = uri_decode_list(
                 args['variable_modification_list'])
 
-        if 'protein-prospector-xml' in args:
-            ms_digest = MSDigestParamters.parse(args["protein-prospector-xml"])
+        if 'protein_prospector_xml' in args and args["protein_prospector_xml"] is not None:
+            ms_digest = MSDigestParamters.parse(args["protein_prospector_xml"])
             args["constant_modification_list"] = ms_digest.constant_modifications
             args["variable_modification_list"] = ms_digest.variable_modifications
+        args.pop("protein_prospector_xml", None)
 
         param_file = args.pop("parameter_file", None)
         if param_file is not None:

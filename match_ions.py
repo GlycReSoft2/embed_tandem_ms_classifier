@@ -7,6 +7,10 @@ import math
 from os.path import splitext
 from collections import Counter
 
+import tempfile
+import logging
+#logging.basicConfig(stream=tempfile.TemporaryFile(), level=logging.DEBUG)
+
 import yaml
 
 from error_code_interface import NoIonsMatchedException
@@ -37,6 +41,14 @@ def Mergedicts(dicts_to_merge):
     # into it if they have a ppm error closer to 0, or if they have a row not existing in the first row.
     # in case the first dicts_to_merge is zero, we need a loop here. "allzero" is used
     # to check if all "rows in dicts_to_merge" are empty.
+    # for dlist in dicts_to_merge:
+    #     logging.debug("[")
+    #     for d in dlist:
+    #         logging.debug("\t{")
+    #         for k, v in d.items():
+    #             logging.debug("\t\t%s -> %s" % (k, v))
+    #         logging.debug("\t}")
+    #     logging.debug("]")
     allzero = True
     if len(dicts_to_merge) <= 1:
         if dicts_to_merge[0]:
