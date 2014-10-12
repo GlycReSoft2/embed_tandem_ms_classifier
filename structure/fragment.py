@@ -56,3 +56,6 @@ class Fragment:
                     pass
 
         return ''.join(fragment_name)
+
+    def __repr__(self):
+        return "Fragment(%(type)s @ %(pos)s %(mass)s [%(mod_dict)s])" % self.__dict__

@@ -118,7 +118,10 @@ class Sequence(PeptideSequenceBase):
         '''
             A Pythonic way to access an index in the sequence
         '''
-        return self.seq[index]
+        sub = self.seq[index]
+        # if isinstance(index, slice):
+        #     sub = Sequence(sub)
+        return sub
 
     def __setitem__(self, index, value):
         '''
@@ -169,10 +172,10 @@ class Sequence(PeptideSequenceBase):
                 if mod.name == 'HexNAc':
                     hn_num += 1
                     continue
-                if mod.name in mod_dict:
-                    mod_dict[mod.name] += 1
+                if mod.serialize() in mod_dict:
+                    mod_dict[mod.serialize()] += 1
                 else:
-                    mod_dict[mod.name] = 1
+                    mod_dict[mod.serialize()] = 1
 
             if idx == 0:
                 current_mass = seq_list[0][0].mass + mass_shift

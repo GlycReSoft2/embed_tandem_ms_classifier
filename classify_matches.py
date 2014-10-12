@@ -98,7 +98,7 @@ def shim_percent_calcs(data):
 # composition at the end with "[]".
 def get_sequence_length(data):
     data["peptideLens"] = data.Peptide.str.split(
-        r'\(.*?\)').str.join(' ').str.len()
+        r'\(.*?\)').str.join('').str.len()
     return data
 
 
@@ -194,6 +194,16 @@ def compute_ion_coverage_map(row):
                      "meanHexNAcCoverage": mean_hexnac_coverage,
                      "peptideCoverageMap": list(total_coverage),
                      "hexNAcCoverageMap": list(hexnac_coverage)})
+
+
+def build_ion_map(ion_set, ion_type, length):
+    pat = re.compile(r"{0}(\d+)\+?".format(ion_type))
+    coverage = np.zeros(length)
+    for ion in ion_set:
+        inst_cover = np.zeroes(length)
+        inst_cover[:int(pat.findall(ion["key"][0]))] = 1
+        coverage += inst_cover
+
 
 
 # Based upon the assumption that the same MS1 Score + Observed Mass implies

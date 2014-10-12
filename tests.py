@@ -126,9 +126,12 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
 
     def test_7_calculate_fdr_step(self):
         print("test_7_calculate_fdr_step")
-        predicates = [calculate_fdr.make_predicate(MS2_Score=i, peptideLens=5) for i in [0.2, 0.4, 0.6, 0.8, .9]]
-        predicates.extend([calculate_fdr.make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
-        predicates.extend([calculate_fdr.make_predicate(MS2_Score=i, peptideLens=15) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        make_predicate = calculate_fdr.make_predicate
+        predicates = [make_predicate(MS2_Score=i) for i in [0.2, 0.4, 0.6, 0.8, .9]]
+        predicates.extend([make_predicate(MS2_Score=i, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        predicates.extend([make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, meanHexNAcCoverage=.4) for i in [0.2, 0.4, 0.6, 0.8, .9]])
         self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
                                               self.test_model_file_path, suffix_len=1,
                                               predicate_fns=predicates)

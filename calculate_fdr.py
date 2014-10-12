@@ -19,9 +19,10 @@ def make_predicate(**kwargs):
 
 
 def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0, vol=-1,
-                   peptideLens=0, Obs_Mass=0):
+                   peptideLens=0, Obs_Mass=0, numStubs=-1):
     return (x.MS2_Score >= MS2_Score) & (x.meanCoverage >= meanCoverage) & (x.percentUncovered <= percentUncovered) &\
-           (x.MS1_Score >= MS1_Score) & (x.vol >= vol) & (x.peptideLens >= peptideLens) & (x.Obs_Mass >= Obs_Mass)
+           (x.MS1_Score >= MS1_Score) & (x.vol >= vol) & (x.peptideLens >= peptideLens) & (x.Obs_Mass >= Obs_Mass) &\
+           (x.numStubs >= numStubs)
 
 
 def build_shuffle_seqs(scored_matches, count=20, prefix_len=0, suffix_len=0):
@@ -173,7 +174,9 @@ if __name__ == '__main__':
             when generating random glycopeptides by shuffling.")
     args = app.parse_args()
     predicates = [make_predicate(MS2_Score=i) for i in [0.2, 0.4, 0.6, 0.8, .9]]
+    predicates.extend([make_predicate(MS2_Score=i, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
     predicates.extend([make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
-    predicates.extend([make_predicate(MS2_Score=i, peptideLens=15) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+    predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+    predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, meanHexNAcCoverage=.4) for i in [0.2, 0.4, 0.6, 0.8, .9]])
 
     main(args.scored_matches, args.decon_data, args.model_file, args.decoy_matches, predicate_fns=predicates)
