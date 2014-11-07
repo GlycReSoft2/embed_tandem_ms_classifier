@@ -177,6 +177,15 @@ def classify_with_model_app_function(
     print(classification_results_file)
 
 
+def reclassify_with_model_app_function(target_file, method="full", model_file=None, out=None):
+    if out is None:
+        out = os.path.splitext(target_file)[0] + ".rescored.csv"
+    classification_results_file = classify_data_by_model(
+        target_file, method=method,
+        model_file_path=model_file, out=out)
+    print(classification_results_file)
+
+
 def model_diagnostics_app_function(model_file, method="full"):
     task = ModelDiagnosticsTask(model_file_path=model_file, method=method)
     result = task.run()
@@ -262,6 +271,18 @@ def main():
 
     classify_with_model_app.add_argument("--out", action="store", default=None)
     classify_with_model_app.set_defaults(func=classify_with_model_app_function)
+
+    reclassify_with_model_app = subparsers.add_parser(
+        "reclassify-with-model", help="Rerun classification of an matched ion data file")
+    reclassify_with_model_app.add_argument("--target-file", action="store", default=None, required=True,
+                                           help="Matched ion data file to re-classify")
+    reclassify_with_model_app.add_argument(
+        "--method", action="store", default="full",
+        choices=set(ModelDiagnosticsTask.method_table),
+        help="Select the model method to use for classification")
+    reclassify_with_model_app.add_argument("--model-file",
+                                           action="store", default=None, required=True)
+    reclassify_with_model_app.set_defaults(func=reclassify_with_model_app_function)
 
     model_diagnostics_app = subparsers.add_parser(
         "model-diagnostics", help="Given a labeled model, calculate model diagnostics")

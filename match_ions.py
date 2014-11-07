@@ -9,8 +9,10 @@ from collections import Counter
 
 import tempfile
 import logging
-#logging.basicConfig(stream=tempfile.TemporaryFile(), level=logging.DEBUG)
-
+try:
+    logging.basicConfig(stream=open("match-log.txt", 'w'), level=logging.INFO)
+except:
+    logging.info = lambda x: x
 import yaml
 
 from error_code_interface import NoIonsMatchedException
@@ -132,7 +134,10 @@ def Mergedicts(dicts_to_merge):
             Finalfirstrow.append(items)
     return Finalfirstrow
 
-
+## TODO:
+## Profile how scan_id spreads across merges
+## Look at how much information can be discerned across time between two ambiguous matches
+## Propagate this data along to downstream steps
 def MergeRows(SourceData):
     # for row in range(len(SourceData)):
     #	print(SourceData[row]['MS1_Score'], SourceData[row]['bare_b_ions'], "\n")
@@ -147,6 +152,7 @@ def MergeRows(SourceData):
         newStorage.append(Storage)
         #print(SourceData[row]['MS1_Score'], SourceData[row]['bare_b_ions'], "\n")
         if SourceData[row]['Glycopeptide_identifier'] == Storage['Glycopeptide_identifier']:
+            logging.info(SourceData[row], Storage)
             Storage = SourceData[row]
             newStorage.append(Storage)
             # If this is the last row in SourceData, merge the rows now,
@@ -161,10 +167,12 @@ def MergeRows(SourceData):
                 bic = []
                 yic = []
                 si = []
+                scan_id_range = set()
                 # newrow is used to store our combined row
                 newrow = []
                 # input initial variables into newrow.
                 newrow = newStorage[0]
+
                 for row2 in newStorage:
                     oi.append(row2["Oxonium_ions"])
                     bbi.append(row2["bare_b_ions"])
@@ -174,6 +182,7 @@ def MergeRows(SourceData):
                     bic.append(row2["b_ion_coverage"])
                     yic.append(row2["y_ion_coverage"])
                     si.append(row2["Stub_ions"])
+                    scan_id_range.add(row2["scan_id"])
                 # Change the N P R T V X Y Z columns' values in newrow.
                 #print(newrow['MS1_Score'], yic, "\n")
                 newrow["Oxonium_ions"] = Mergedicts(oi)
@@ -184,6 +193,7 @@ def MergeRows(SourceData):
                 newrow["b_ion_coverage"] = Mergedicts(bic)
                 newrow["y_ion_coverage"] = Mergedicts(yic)
                 newrow["Stub_ions"] = Mergedicts(si)
+                newrow["scan_id_range"] = list(scan_id_range)
                 # Now put the newrow into the final output
                 #print (newrow['MS1_Score'], newrow["y_ion_coverage"], "\n\n")
                 MergedList.append(newrow)
@@ -204,6 +214,7 @@ def MergeRows(SourceData):
             bic = []
             yic = []
             si = []
+            scan_id_range = set()
             # newrow is used to store our combined row
             newrow = []
             # input initial variables into newrow.
@@ -217,6 +228,7 @@ def MergeRows(SourceData):
                 bic.append(row2["b_ion_coverage"])
                 yic.append(row2["y_ion_coverage"])
                 si.append(row2["Stub_ions"])
+                scan_id_range.add(row2["scan_id"])
             # Change the N P R T V X Y Z columns' values in newrow.
             #print(newrow['MS1_Score'], yic, "\n")
             newrow["Oxonium_ions"] = Mergedicts(oi)
@@ -227,6 +239,7 @@ def MergeRows(SourceData):
             newrow["b_ion_coverage"] = Mergedicts(bic)
             newrow["y_ion_coverage"] = Mergedicts(yic)
             newrow["Stub_ions"] = Mergedicts(si)
+            newrow["scan_id_range"] = list(scan_id_range)
             #print (newrow['MS1_Score'], newrow["y_ion_coverage"], "\n\n")
             # Now put the newrow into the final output
             newStorage = []
@@ -418,7 +431,8 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                      "total_y_ions": y_len, "b_ions_with_HexNAc": b_HexNAc_type,
                      "y_ions_with_HexNAc": y_HexNAc_type,
                      "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type,
-                     "scan_id": scan_id
+                     "scan_id": scan_id,
+                     "scan_id_range": []
                      })
             else:
                 pass
@@ -433,7 +447,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
         "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
         "bare_b_ions", "possible_b_ions_HexNAc", "total_b_ions", "bare_y_ions", "possible_y_ions_HexNAc",
         "total_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage",
-        "Stub_ions", "scan_id"
+        "Stub_ions", "scan_id", "scan_id_range"
     ]
     f = open(outfile + '.csv', 'wb')
     dict_writer = csv.DictWriter(f, keys)

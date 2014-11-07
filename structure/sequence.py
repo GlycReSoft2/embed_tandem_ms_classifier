@@ -50,11 +50,13 @@ def sequence_tokenizer(sequence):
             current_aa += next_char
         elif state == "mod":
             current_mod += next_char
+        elif next_char == "[":
+            break
         else:
             raise Exception("Unknown Tokenizer State", current_aa, current_mod, i, next_char)
         i += 1
     if current_aa != "":
-        new_chunk = [current_aa, ""]
+        new_chunk = [current_aa, current_mod]
         chunks.append(new_chunk)
     return chunks
 

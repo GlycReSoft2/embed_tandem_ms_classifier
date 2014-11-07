@@ -18,6 +18,14 @@ def make_predicate(**kwargs):
     return functools.partial(predicate_base, **kwargs)
 
 
+def and_predicate(predicate, other):
+    return lambda x: predicate(x) and other(x)
+
+
+def or_predicate(predicate, other):
+    return lambda x: predicate(x) or other(x)
+
+
 def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0, vol=-1,
                    peptideLens=0, Obs_Mass=0, numStubs=-1):
     return (x.MS2_Score >= MS2_Score) & (x.meanCoverage >= meanCoverage) & (x.percentUncovered <= percentUncovered) &\
@@ -174,9 +182,9 @@ if __name__ == '__main__':
             when generating random glycopeptides by shuffling.")
     args = app.parse_args()
     predicates = [make_predicate(MS2_Score=i) for i in [0.2, 0.4, 0.6, 0.8, .9]]
-    predicates.extend([make_predicate(MS2_Score=i, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+    predicates.extend([make_predicate(MS2_Score=i, numStubs=1) for i in [0.2, 0.4, 0.6, 0.8, .9]])
     predicates.extend([make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
-    predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+    predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, numStubs=1) for i in [0.2, 0.4, 0.6, 0.8, .9]])
     predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, meanHexNAcCoverage=.4) for i in [0.2, 0.4, 0.6, 0.8, .9]])
 
     main(args.scored_matches, args.decon_data, args.model_file, args.decoy_matches, predicate_fns=predicates)

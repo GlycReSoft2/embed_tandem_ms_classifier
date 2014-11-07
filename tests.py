@@ -1,12 +1,13 @@
 import os
 import unittest
-
+import warnings
 import csv
 
 from protein_prospector.xml_parser import MSDigestParamters
 import theoretical_glycopeptide
 import calculate_fdr
 import entry_point
+import classify_matches
 
 from structure import sequence
 from structure import composition
@@ -65,6 +66,7 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
     constant_modifications = ["Carbamidomethyl (C)"]
     variable_modifications = ["Deamidated (N)", "Deamidated (Q)"]
     method = "full"
+    methods = classify_matches.ModelTask.method_table.keys()
     ms1_match_tolerance = 1E-05
     ms2_match_tolerance = 2E-05
 
@@ -111,9 +113,11 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
         self.model_file_path = entry_point.prepare_model_file(self.postprocessed_ions_file,
                                                               method=self.method)
         self.assertTrue(os.path.exists(self.model_file_path))
+        print(warnings.onceregistry)
 
     def test_5_classify_with_model_step(self):
         print("test_5_classify_with_model_step")
+        warnings.simplefilter(action="error")
         self.classification_results_file = entry_point.classify_data_by_model(self.postprocessed_ions_file,
                                                                               self.test_model_file_path,
                                                                               method=self.method)
@@ -121,8 +125,9 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
 
     def test_6_evaluate_model_step(self):
         print("test_6_evaluate_model_step")
-        self.model_eval_file = entry_point.ModelDiagnosticsTask(self.model_file_path, self.method).run()
-        self.assertTrue(os.path.exists(self.model_eval_file))
+        for method in self.methods:
+            self.model_eval_file = entry_point.ModelDiagnosticsTask(self.model_file_path, method).run()
+            self.assertTrue(os.path.exists(self.model_eval_file))
 
     def test_7_calculate_fdr_step(self):
         print("test_7_calculate_fdr_step")
@@ -131,7 +136,8 @@ class TestIonMatchingPipelineProgram(unittest.TestCase):
         predicates.extend([make_predicate(MS2_Score=i, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
         predicates.extend([make_predicate(MS2_Score=i, peptideLens=10) for i in [0.2, 0.4, 0.6, 0.8, .9]])
         predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, numStubs=0) for i in [0.2, 0.4, 0.6, 0.8, .9]])
-        predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, meanHexNAcCoverage=.4) for i in [0.2, 0.4, 0.6, 0.8, .9]])
+        predicates.extend([make_predicate(MS2_Score=i, peptideLens=10, meanHexNAcCoverage=.4) for i in
+            [0.2, 0.4, 0.6, 0.8, .9]])
         self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
                                               self.test_model_file_path, suffix_len=1,
                                               predicate_fns=predicates)

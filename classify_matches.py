@@ -12,8 +12,8 @@ from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import roc_curve, auc, confusion_matrix
-from sklearn.cross_validation import ShuffleSplit
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix
 
 # Defines the list of fields that must be JSON encoded and decoded
 # for storage in CSV files. Because regular scientists cannot possibly
@@ -22,16 +22,8 @@ from sklearn.cross_validation import ShuffleSplit
 json_serialized_columns = ["Oxonium_ions", "Stub_ions",
                            "b_ion_coverage", "b_ions_with_HexNAc",
                            "y_ion_coverage", "y_ions_with_HexNAc",
-                           "peptideCoverageMap", "hexNAcCoverageMap"]
-
-# A map for translating legacy labels for 'call' to and from
-# Python booleans
-call_map = {
-    "Yes": True,
-    "No": False,
-    True: "Yes",
-    False: "No"
-}
+                           "peptideCoverageMap", "hexNAcCoverageMap",
+                           "scan_id_range"]
 
 
 # Decode :json_serialized_columns columns into Python objects for interaction.
@@ -40,11 +32,15 @@ call_map = {
 def deserialize_compound_fields(data_struct):
     for field in json_serialized_columns:
         try:
-            data_struct[field] = map(json.loads, data_struct[field])
+            data_struct[field] = pd.Series(map(json.loads, data_struct[field]))
         except TypeError:
+            #print("Deserializing %s failed (TypeError)" % field)
             pass
         except KeyError:
+            #print("Deserializing %s failed (KeyError)" % field)
             pass
+        except ValueError, e:
+            raise ValueError(str(e) + " " + field)
 
     return data_struct
 
@@ -56,7 +52,10 @@ def deserialize_compound_fields(data_struct):
 # the input object.
 def serialize_compound_fields(data_struct):
     for field in json_serialized_columns:
-        data_struct[field] = map(json.dumps, data_struct[field])
+        try:
+            data_struct[field] = map(json.dumps, data_struct[field])
+        except:
+            pass  # Not all fields must be present
     return data_struct
 
 
@@ -102,6 +101,62 @@ def get_sequence_length(data):
     return data
 
 
+def extract_modifications(sequence):
+    state = "aa"
+    mods = []
+    glycan = ""
+    current_aa = ""
+    current_mod = ""
+    paren_level = 0
+    i = 0
+    while i < len(sequence):
+        next_char = sequence[i]
+        if next_char is "(":
+            if state == "aa":
+                state = "mod"
+                assert paren_level == 0
+                paren_level += 1
+            elif state == "mod":
+                paren_level += 1
+                current_mod += next_char
+        elif next_char == ")":
+            if state == "aa":
+                raise Exception("Invalid Sequence. ) found outside of modification.")
+            elif state == "mod":
+                paren_level -= 1
+                if paren_level == 0:
+                    state = 'aa'
+                    mods.append(current_mod)
+                    current_mod = ""
+                    current_aa = ""
+                else:
+                    current_mod += next_char
+        elif next_char == "[":
+            glycan = sequence[i:]
+            break
+        elif state == "aa":
+            if(current_aa != ""):
+                current_mod = ""
+                current_aa = ""
+            current_aa += next_char
+        elif state == "mod":
+            current_mod += next_char
+        else:
+            raise Exception("Unknown Tokenizer State", current_aa, current_mod, i, next_char)
+        i += 1
+    if current_mod != "":
+        mods.append(current_mod)
+    mods = sorted(mods)
+
+    return ','.join(mods) + glycan
+
+
+def get_modification_signature(data_struct):
+    mod_data = data_struct.Glycopeptide_identifier.apply(extract_modifications)
+    data_struct["modificationSignature"] = mod_data
+    return data_struct
+
+
 # Given the path to a CSV file for a model or target to be classified, parse the
 # CSV into a pandas.DataFrame and make sure it has all of the necessary columns and
 # transformations to either build a model with it or
@@ -110,11 +165,11 @@ def prepare_model_file(path):
     deserialize_compound_fields(data)
     data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
     ix = np.isnan(data.vol)
-    data.vol.ix[ix] = -1
+    data.ix[ix].vol = -1
     ix = np.isnan(data.startAA)
-    data.startAA.ix[ix] = -1
+    data.ix[ix].startAA = -1
     ix = np.isnan(data.endAA)
-    data.endAA.ix[ix] = -1
+    data.ix[ix].endAA = -1
     data['abs_ppm_error'] = data.ppm_error.abs()
     if "peptideLens" not in data:
         data = get_sequence_length(data)
@@ -144,6 +199,10 @@ def get_ion_coverage_score(data_struct):
     data_struct['meanHexNAcCoverage'] = coverage_data['meanHexNAcCoverage']
     data_struct['peptideCoverageMap'] = coverage_data['peptideCoverageMap']
     data_struct['hexNAcCoverageMap'] = coverage_data['hexNAcCoverageMap']
+    data_struct["bIonCoverageMap"] = coverage_data["bIonCoverage"]
+    data_struct["bIonCoverageWithHexNAcMap"] = coverage_data["bIonCoverageWithHexNAc"]
+    data_struct["yIonCoverageMap"] = coverage_data["yIonCoverage"]
+    data_struct["yIonCoverageWithHexNAcMap"] = coverage_data["yIonCoverageWithHexNAc"]
     return data_struct
 
 
@@ -176,34 +235,41 @@ def compute_ion_coverage_map(row):
     for y_ion in row['y_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
         ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0])] = 1
-        y_ion_coverage += ion
+        y_ions_with_HexNAc += ion
 
     total_coverage += b_ion_coverage + b_ions_with_HexNAc
     total_coverage += y_ion_coverage[
         ::-1] + y_ions_with_HexNAc[::-1]  # Reverse
 
     percent_uncovered = (sum(total_coverage == 0) / float(peptide_length))
-    mean_coverage = total_coverage.mean() / float(peptide_length)
+    mean_coverage = total_coverage.mean() / (float(peptide_length))
 
     hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1])
     # The denominator factor here needs to be looked at more closely.
-    mean_hexnac_coverage = hexnac_coverage.mean() / (float(peptide_length)/2.0)
+    mean_hexnac_coverage = hexnac_coverage.mean(
+    ) / (float(peptide_length / 2.0))
 
     return pd.Series({"meanCoverage": mean_coverage,
-                     "percentUncovered": percent_uncovered,
-                     "meanHexNAcCoverage": mean_hexnac_coverage,
-                     "peptideCoverageMap": list(total_coverage),
-                     "hexNAcCoverageMap": list(hexnac_coverage)})
+                      "percentUncovered": percent_uncovered,
+                      "meanHexNAcCoverage": mean_hexnac_coverage,
+                      "peptideCoverageMap": list(total_coverage),
+                      "hexNAcCoverageMap": list(hexnac_coverage),
+                      "bIonCoverage": b_ion_coverage + b_ions_with_HexNAc,
+                      "bIonCoverageWithHexNAc": b_ions_with_HexNAc,
+                      "yIonCoverage": y_ion_coverage[::-1] + y_ions_with_HexNAc[::-1],
+                      "yIonCoverageWithHexNAc":  y_ions_with_HexNAc[::-1]
+                      })
 
 
 def build_ion_map(ion_set, ion_type, length):
     pat = re.compile(r"{0}(\d+)\+?".format(ion_type))
     coverage = np.zeros(length)
     for ion in ion_set:
-        inst_cover = np.zeroes(length)
-        inst_cover[:int(pat.findall(ion["key"][0]))] = 1
+        inst_cover = np.zeros(length)
+        inst_cover[:int(pat.findall(ion["key"])[0])] = 1
         coverage += inst_cover
 
+    return coverage
 
 
 # Based upon the assumption that the same MS1 Score + Observed Mass implies
@@ -226,8 +292,8 @@ def determine_ambiguity(data_struct):
         if (len(group.index) == 1):
             regrouping.append(group)
             continue
-        group.sort(columns=sort_fields, ascending=sort_direction,
-                   axis=0, inplace=True)
+        group = group.sort(columns=sort_fields, ascending=sort_direction,
+                           axis=0)
         group['ambiguity'] = True
         regrouping.append(group)
 
@@ -272,9 +338,11 @@ model_definitions = {
     ],
     "backbone_hexnac": [
         "meanHexNAcCoverage",
-        "percentUncovered"
+        "percentUncovered",
     ],
 }
+
+fitting_functions = []
 
 
 def fit_random_forest(
@@ -289,7 +357,7 @@ def fit_random_forest(
         model_fit_args = dict()
     model_init_args['max_features'] = max_features
     model_init_args['oob_score'] = oob_score
-    model_init_args['n_jobs'] = 2
+    model_init_args['n_jobs'] = n_jobs
     model_init_args['n_estimators'] = n_estimators
     rfc = RandomForestClassifier(**model_init_args)
     rfc.fit(data_struct[formula], data_struct['call'], **model_fit_args)
@@ -314,7 +382,7 @@ def fit_gradient_boosted_forest(data_struct, formula=None, max_features="auto",
     return gbc
 
 
-def fit_radial_basis_svm(data_struct, formula=None, model_init_args=None, model_fit_args=None):
+def fit_svc(data_struct, formula=None, model_init_args=None, model_fit_args=None):
     if formula is None:
         formula = model_definitions['full']
     if model_init_args is None:
@@ -325,6 +393,22 @@ def fit_radial_basis_svm(data_struct, formula=None, model_init_args=None, model_
     svc = SVC(**model_init_args)
     svc.fit(data_struct[formula], data_struct['call'], **model_fit_args)
     return svc
+
+
+def fit_logistic_regression(data_struct, formula=None, model_init_args=None, model_fit_args=None):
+    if formula is None:
+        formula = model_definitions['full']
+    if model_init_args is None:
+        model_init_args = dict()
+    if model_fit_args is None:
+        model_fit_args = dict()
+    model_init_args["penalty"] = model_init_args.get("penalty", "l1")
+    log_reg = LogisticRegression(**model_init_args)
+    log_reg.fit(data_struct[formula], data_struct["call"], **model_fit_args)
+    return log_reg
+
+fitting_functions.extend(
+    [fit_random_forest, fit_gradient_boosted_forest, fit_svc, fit_logistic_regression])
 
 
 def classify_with_model(classifier, data_struct, formula=None):
@@ -369,7 +453,8 @@ class ModelTask(object):
         "full": ["full", fit_random_forest],
         "gradient_boosted": ["full", fit_gradient_boosted_forest],
         "backbone_hexnac": ["backbone_hexnac", fit_random_forest],
-        "radial_basis_svm": ["full", fit_radial_basis_svm]
+        "svc": ["full", fit_svc],
+        "logreg": ["full", fit_logistic_regression],
     }
 
     @classmethod
@@ -453,7 +538,7 @@ class ClassifyTargetWithModelTask(ModelTask):
             self.classifier, self.target_frame, self.model_formula)
         self.target_frame["noise_filter"] = scores
         self.target_frame["MS2_Score"] = scores * (((self.target_frame.meanCoverage +
-                                                    self.target_frame.meanHexNAcCoverage)/2.0)
+                                                     self.target_frame.meanHexNAcCoverage) / 2.0)
                                                    - self.target_frame.percentUncovered)
         self.target_frame = determine_ambiguity(self.target_frame)
         self.target_frame['call'] = scores > 0.5
@@ -504,7 +589,8 @@ class ModelDiagnosticsTask(ModelTask):
     def plot_feature_importance(self, ax):
         if not hasattr(self.classifier, "feature_importances_"):
             #raise Exception("Has no feature importances")
-            ax.text(0.5, 0.5, "This classifier does not support\nfeature importance")
+            ax.text(
+                0.5, 0.5, "This classifier does not support\nfeature importance")
             ax.axis([0, 1, 0, 1])
         else:
             ax.bar(np.arange(len(self.classifier.feature_importances_)),
@@ -527,9 +613,9 @@ class ModelDiagnosticsTask(ModelTask):
 
         # True Positive, False Negative, False Positive, True Negative
         model_conf_measures = [model_conf_matrix[0, 0], model_conf_matrix
-                              [0, 1], model_conf_matrix[1, 0], model_conf_matrix[1, 1]]
+                               [0, 1], model_conf_matrix[1, 0], model_conf_matrix[1, 1]]
         null_conf_measures = [null_conf_matrix[0, 0], null_conf_matrix
-                             [0, 1], null_conf_matrix[1, 0], null_conf_matrix[1, 1]]
+                              [0, 1], null_conf_matrix[1, 0], null_conf_matrix[1, 1]]
 
         #print((self.model_frame['call'] == True).sum(), self.model_frame['call'].count())
 

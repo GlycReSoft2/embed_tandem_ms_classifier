@@ -117,7 +117,8 @@ def main(matched_ions_file, output_file=None):
                                "percent_b_ion_coverage": percent_b,
                                "percent_y_ion_coverage": percent_y,
                                "#_of_stubs_found": stubs_found,
-                               "scan_id": rows['scan_id']
+                               "scan_id": rows['scan_id'],
+                               "scan_id_range": json.dumps(ast.literal_eval(rows["scan_id_range"]))
                                })
 
     keys = [
@@ -149,7 +150,8 @@ def main(matched_ions_file, output_file=None):
         "percent_b_ion_coverage",
         "percent_y_ion_coverage",
         "#_of_stubs_found",
-        'scan_id']
+        'scan_id',
+        "scan_id_range"]
 
     f = open(output_file + ".csv", 'wb')
     dict_writer = csv.DictWriter(f, keys)
