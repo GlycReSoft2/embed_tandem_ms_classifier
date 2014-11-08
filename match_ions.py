@@ -3,16 +3,16 @@
 import ast
 import csv
 import math
-#import os
 from os.path import splitext
 from collections import Counter
+from itertools import izip
 
 import tempfile
 import logging
 try:
     logging.basicConfig(stream=open("match-log.txt", 'w'), level=logging.INFO)
 except:
-    logging.info = lambda x: x
+    logging.basicConfig(level=logging.INFO)
 import yaml
 
 from error_code_interface import NoIonsMatchedException
@@ -36,6 +36,8 @@ Proton = 1.007276035
 
 ms1_tolerance_default = 10e-6
 ms2_tolerance_default = 20e-6
+
+MACHINE_ACQUISITION_RANGE = 3200 * 24
 
 
 def Mergedicts(dicts_to_merge):
@@ -128,7 +130,6 @@ def Mergedicts(dicts_to_merge):
                         firstrow.append(ReadingItems)
 
     Finalfirstrow = []
-    isB = 0
     for items in firstrow:
         if items:
             Finalfirstrow.append(items)
@@ -303,7 +304,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
             more['_iterkey'] = tandem_ms_ind
             real_ions = []
             # all ions in scan assigned to list real_ions
-            real_ions = more['mass']
+            # real_ions = more['mass']
             scan_id = more['scans'][0]['id']
 
             # this takes the information from the first scan in case there
@@ -318,6 +319,16 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
             if math.fabs(ppm) <= ms1_tolerance:
                 did_match_cache[tandem_ms_ind] += 1
                 Oxonium_ions = ast.literal_eval(lines['Oxonium_ions'])
+
+                # Try to limit available ions to match by the precursor charge
+                try:
+                    real_ions = [ion[0] for ion
+                                 in izip(more["mass"], more["z"], more["intensity"])
+                                 if ion[1] <= charge and ion[0] < MACHINE_ACQUISITION_RANGE]
+                except Exception, e:
+                    logging.info("An error occurred while trying to filter ions")
+                    logging.exception(e)
+                    real_ions = more["mass"]
 
                 oxoniums = []
                 for ox_ion in Oxonium_ions:
@@ -344,8 +355,6 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                                 {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
                             all_b_ions.append(
                                 {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                        else:
-                            pass
 
                 b_HexNAc_ions = ast.literal_eval(
                     lines['b_ions_with_HexNAc'])
@@ -363,13 +372,8 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                                 {"obs_ion": (obs_ions + Proton),
                                  "key": theo_ions["key"].split("+")[0],
                                  "ppm_error": tandem_ppm})
-                            #print (obs_ions, theo_ions["mass"], theo_ions["key"], tandem_ppm)
-                        else:
-                            pass
-                #b_HexNAc_len_found = len(b_HexNAc_type)
 
                 y_ions = list(ast.literal_eval(lines['bare_y_ions']))
-                # print "\n, y ions:"
                 y_len = float(len(y_ions))
                 y_type = []
                 all_y_ions = []
@@ -414,8 +418,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                         if math.fabs(tandem_ppm) <= ms2_tolerance:
                             stub_type.append(
                                 {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
-                        else:
-                            pass
+
                 results.append(
                     {"MS1_Score": lines["MS1_Score"], "Obs_Mass": lines["Obs_Mass"],
                      "Calc_mass": lines["Calc_mass"],

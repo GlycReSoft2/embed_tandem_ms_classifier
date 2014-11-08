@@ -76,10 +76,10 @@ def postprocess_matches(matched_ions_file):
     return postprocess.main(matched_ions_file)
 
 
-def prepare_model_file(postprocessed_ions_file, method="full", out=None):
+def prepare_model_file(postprocessed_ions_file, method="full_random_forest", out=None):
     try:
         task = PrepareModelTask(
-            model_file_path=postprocessed_ions_file, method="full", output_path=out)
+            model_file_path=postprocessed_ions_file, method="full_random_forest", output_path=out)
         result = task.run()
         return result
     except Exception, e:
@@ -87,7 +87,7 @@ def prepare_model_file(postprocessed_ions_file, method="full", out=None):
 
 
 def classify_data_by_model(
-    postprocessed_ions_file, model_file_path, method="full", out=None, method_init_args=None,
+    postprocessed_ions_file, model_file_path, method="full_random_forest", out=None, method_init_args=None,
         method_fit_args=None):
     try:
         task = ClassifyTargetWithModelTask(
@@ -133,7 +133,7 @@ def build_model_app_function(
     ms1_match_tolerance, ms2_match_tolerance,
     constant_modification_list=None,
     variable_modification_list=None,
-    method="full",
+    method="full_random_forest",
         out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(
         ms1_results_file, glycosylation_sites_file,
@@ -157,7 +157,7 @@ def classify_with_model_app_function(
     ms1_match_tolerance, ms2_match_tolerance,
     constant_modification_list=None,
     variable_modification_list=None,
-    method="full", model_file=None,
+    method="full_random_forest", model_file=None,
         out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(
         ms1_results_file, glycosylation_sites_file,
@@ -177,7 +177,7 @@ def classify_with_model_app_function(
     print(classification_results_file)
 
 
-def reclassify_with_model_app_function(target_file, method="full", model_file=None, out=None):
+def reclassify_with_model_app_function(target_file, method="full_random_forest", model_file=None, out=None):
     if out is None:
         out = os.path.splitext(target_file)[0] + ".rescored.csv"
     classification_results_file = classify_data_by_model(
@@ -186,7 +186,7 @@ def reclassify_with_model_app_function(target_file, method="full", model_file=No
     print(classification_results_file)
 
 
-def model_diagnostics_app_function(model_file, method="full"):
+def model_diagnostics_app_function(model_file, method="full_random_forest"):
     task = ModelDiagnosticsTask(model_file_path=model_file, method=method)
     result = task.run()
     print(result)
@@ -212,7 +212,7 @@ def main():
         "--glycosylation-sites-file", action="store", required=True)
     build_model_app.add_argument(
         "--deconvoluted-spectra-file", action="store", required=True)
-    build_model_app.add_argument("--method", action="store", default="full",
+    build_model_app.add_argument("--method", action="store", default="full_random_forest",
                                  choices=set(PrepareModelTask.method_table),
                                  help="Select the model method to use for classification")
     build_model_app.add_argument(
@@ -247,7 +247,7 @@ def main():
     classify_with_model_app.add_argument(
         "--deconvoluted-spectra-file", action="store", required=True)
     classify_with_model_app.add_argument(
-        "--method", action="store", default="full",
+        "--method", action="store", default="full_random_forest",
         choices=set(ClassifyTargetWithModelTask.method_table),
         help="Select the model method to use for classification")
     classify_with_model_app.add_argument("--model-file",
@@ -277,7 +277,7 @@ def main():
     reclassify_with_model_app.add_argument("--target-file", action="store", default=None, required=True,
                                            help="Matched ion data file to re-classify")
     reclassify_with_model_app.add_argument(
-        "--method", action="store", default="full",
+        "--method", action="store", default="full_random_forest",
         choices=set(ModelDiagnosticsTask.method_table),
         help="Select the model method to use for classification")
     reclassify_with_model_app.add_argument("--model-file",
@@ -287,7 +287,7 @@ def main():
     model_diagnostics_app = subparsers.add_parser(
         "model-diagnostics", help="Given a labeled model, calculate model diagnostics")
     model_diagnostics_app.add_argument(
-        "--method", action="store", default="full",
+        "--method", action="store", default="full_random_forest",
         choices=set(ModelDiagnosticsTask.method_table),
         help="Select the model method to use for classification")
     model_diagnostics_app.add_argument("--model-file",

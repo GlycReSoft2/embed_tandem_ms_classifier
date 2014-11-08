@@ -1,6 +1,8 @@
 '''Centralized Definition of Exception Definitions'''
 import os
 import json
+import sys
+import traceback
 import warnings
 
 
@@ -41,7 +43,10 @@ class ErrorCodingMeta(type):
 
 class GlycReSoftInterprocessCommunicationException(Exception):
     __metaclass__ = ErrorCodingMeta
-    pass
+
+    def __init__(self, msg):
+        super(GlycReSoftInterprocessCommunicationException, self).__init__(msg)
+        traceback.print_exc()
 
 
 class ErrorCodeErrorException(GlycReSoftInterprocessCommunicationException):
