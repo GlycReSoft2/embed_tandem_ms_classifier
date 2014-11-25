@@ -29,10 +29,10 @@ class ErrorCodingMeta(type):
         if cls.errcode < cls.ERRCODE_CAP:
             raise ErrorCodeErrorException(
                 "Out of POSIX compliant error codes!")
-        if __name__ != "error_code_interface":
+        if "error_code_interface" not in __name__ :
             warnings.warn(
                 "Error codes should be defined in the error_code_interface.py file.\
-                 This guarantees deterministic code assignment.")
+                 This guarantees deterministic code assignment. " + __name__)
         return type.__new__(cls, name, parents, attrs)
 
     @classmethod

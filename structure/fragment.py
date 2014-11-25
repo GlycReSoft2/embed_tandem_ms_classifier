@@ -1,4 +1,4 @@
-from modification import Modification
+from .modification import Modification
 
 
 class Fragment:

@@ -6,10 +6,11 @@ import re
 from collections import defaultdict
 from collections import Sequence as SequenceCollectionABC
 
-from structure.residue import symbol_to_residue, residue_to_symbol
-from structure import PeptideSequenceBase
-from structure import ModificationBase
-from structure import ResidueBase
+from .residue import residue_to_symbol
+from .residue import symbol_to_residue
+from . import PeptideSequenceBase
+from . import ModificationBase
+from . import ResidueBase
 
 target_string_pattern = re.compile(
     r'((?P<n_term>N-term)|(?P<c_term>C-term)|(?P<amino_acid>[A-Z]+))')

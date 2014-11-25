@@ -1,12 +1,14 @@
 import copy
 import warnings
 
-from structure import PeptideSequenceBase
-from structure.composition import Composition
-from structure.fragment import Fragment
-from structure.modification import Modification
-from structure.residue import Residue
-from utils.memoize import memoize_partial_sequence
+from collections import defaultdict
+
+from . import PeptideSequenceBase
+from .composition import Composition
+from .fragment import Fragment
+from .modification import Modification
+from .residue import Residue
+from ..utils.memoize import memoize_partial_sequence
 
 
 # sequence must be a string and not unicode
@@ -28,6 +30,8 @@ def sequence_tokenizer(sequence):
             elif state == "mod":
                 paren_level += 1
                 current_mod += next_char
+        elif next_char == "[" and state == 'aa':
+            break
         elif next_char == ")":
             if state == "aa":
                 raise Exception("Invalid Sequence. ) found outside of modification.")
@@ -50,8 +54,6 @@ def sequence_tokenizer(sequence):
             current_aa += next_char
         elif state == "mod":
             current_mod += next_char
-        elif next_char == "[":
-            break
         else:
             raise Exception("Unknown Tokenizer State", current_aa, current_mod, i, next_char)
         i += 1
@@ -77,6 +79,33 @@ def sequence_to_mass(sequence):
     return mass
 
 
+def sequence_tokenizer_respect_sequons(sequence):
+    chunks = sequence_tokenizer(sequence)
+    positions = []
+    i = 0
+    sequence_length = len(chunks)
+    while(i < sequence_length):
+        cur_pos = chunks[i]
+        if cur_pos[0] == "N" and cur_pos[1] == "HexNAc":
+            positions.append(chunks[i:(i+3)])
+        else:
+            positions.append(cur_pos)
+        i += 1
+    return positions
+
+
+def list_to_sequence(seq_list):
+    flat_chunks = []
+    for chunk in seq_list:
+        if(isinstance(chunk[0], list)):
+            flat_chunks.append(list_to_sequence(chunk))
+        else:
+            flat_chunks.append(chunk[0])
+            if(chunk[1] != ''):
+                flat_chunks.append("({0})".format(chunk[1]))
+    return "".join(flat_chunks)
+
+
 class Sequence(PeptideSequenceBase):
     """Name and mass of residues (glycan/peptide)"""
 
@@ -84,6 +113,7 @@ class Sequence(PeptideSequenceBase):
         seq_list = sequence_tokenizer(sequence)
         self.mass = 0.0
         self.seq = []
+        self.mod_index = defaultdict(int)
         for item in seq_list:
             res = Residue()
             res.by_symbol(item[0])
@@ -94,11 +124,11 @@ class Sequence(PeptideSequenceBase):
                     print(item, "Modification failed!", sequence, seq_list)
                     raise
                 self.seq.append([res, [mod]])
+                self.mod_index[mod.name] += 1
                 self.mass += mod.mass
             else:
                 self.seq.append([res, []])
             self.mass += res.mass
-        self.length = len(self.seq)
 
         self.mass += Composition("H2O").mass
 
@@ -108,6 +138,10 @@ class Sequence(PeptideSequenceBase):
 
     def __len__(self):
         return self.length
+
+    @property
+    def length(self):
+        return len(self.seq)
 
     def __iter__(self):
         '''
@@ -124,6 +158,9 @@ class Sequence(PeptideSequenceBase):
         # if isinstance(index, slice):
         #     sub = Sequence(sub)
         return sub
+
+    #Backwards compatibility
+    at = __getitem__
 
     def __setitem__(self, index, value):
         '''
@@ -206,6 +243,7 @@ class Sequence(PeptideSequenceBase):
         try:
             drop_mod = self.seq[pos][1].pop(dropped_index)
             self.mass -= drop_mod.mass
+            self.mod_index[drop_mod.name] -= 1
         except:
             raise Exception("Modification not found! %s @ %s" % (mod_type, pos))
 
@@ -218,6 +256,7 @@ class Sequence(PeptideSequenceBase):
         mod = Modification(rule=mod_type, mod_pos=pos)
         self.seq[pos][1].append(mod)
         self.mass += mod.mass
+        self.mod_index[mod.name] += 1
 
     def append_modification(self, mod):
         if mod.position == -1 | mod.position >= len(self.seq):
@@ -227,6 +266,7 @@ class Sequence(PeptideSequenceBase):
         pos = mod.position
         self.seq[pos][1].append(mod)
         self.mass += mod.mass
+        self.mod_index[mod.name] += 1
 
     def get_sequence(self, start=0):
         """
@@ -244,14 +284,10 @@ class Sequence(PeptideSequenceBase):
             seq_list.append(''.join([x.symbol, mod_str]))
         return ''.join(seq_list)
 
+    __str__ = get_sequence
+
     def get_sequence_list(self, start=0):
         return self.seq[start:]
-
-    def at(self, position):
-        '''
-            A getter retained for backwards compatibility. See __getitem__.
-        '''
-        return self.seq[position]
 
     def get_mass(self):
         '''
@@ -265,3 +301,80 @@ class Sequence(PeptideSequenceBase):
             then parsing the result.
         '''
         return Sequence(self.get_sequence())
+
+    def append(self, residue, modification=None):
+        self.mass += residue.mass
+        next_pos = [residue]
+        if modification is None:
+            next_pos.append([])
+        else:
+            next_pos.append([modification])
+            self.mass += modification.mass
+            self.mod_index[modification.name] += 1
+        self.seq.append(next_pos)
+
+    def extend(self, sequence):
+        if not isinstance(sequence, PeptideSequenceBase):
+            sequence = Sequence(sequence)
+        self.seq.extend(sequence.seq)
+        self.mass += sequence.mass - Composition("H2O").mass
+        for mod, count in sequence.mod_index.items():
+            self.mod_index[mod] += count
+
+    def push(self, residue, modification=None):
+        pos = [residue]
+        self.mass += residue.mass
+        if modification is None:
+            pos.append("")
+        else:
+            pos.append([modification])
+            self.mass += modification.mass
+            self.mod_index[modification.name] += 1
+        self.seq.insert(0, pos)
+
+    def leading_extend(self, sequence):
+        if not isinstance(sequence, PeptideSequenceBase):
+            sequence = Sequence(sequence)
+        self.seq = sequence.seq + self.seq
+        self.mass += sequence.mass
+        for mod, count in sequence.mod_index.items():
+            self.mod_index[mod] += count
+
+
+class GrowingSequence(Sequence):
+    def __init__(self, sequence, cleavage_pattern):
+        super(GrowingSequence, self).__init__(sequence)
+        self.cleavage_pattern = cleavage_pattern
+        self.missed_cleavages = cleavage_pattern.count(sequence)
+
+    def extend(self, sequence):
+        super(GrowingSequence, self).extend(sequence)
+        self.missed_cleavages += sequence.missed_cleavages
+
+    def leading_extend(self, sequence):
+        super(GrowingSequence, self).leading_extend(sequence)
+        self.missed_cleavages += sequence.missed_cleavages
+
+    def pad(self):
+        for padded in self.cleavage_pattern.pad(self):
+            yield GrowingSequence(padded, self.cleavage_pattern)
+
+
+class Protease(object):
+    def __init__(self, prefix, suffix):
+        self.prefix = prefix
+        self.suffix = suffix
+
+    def count(self, sequence):
+        cnt = 0
+        if not isinstance(sequence, PeptideSequenceBase):
+            sequence = Sequence(sequence)
+        cnt += sum([resid.symbol in self.prefix for resid, mods in sequence[1:]])
+        cnt += sum([resid.symbol in self.suffix for resid, mods in sequence[:-1]])
+
+        return cnt
+
+    def pad(self, sequence):
+        for pref in self.prefix:
+            for suf in self.suffix:
+                yield "{0}{1}{2}".format(pref, str(sequence), suf)

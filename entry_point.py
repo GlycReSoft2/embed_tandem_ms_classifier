@@ -33,6 +33,7 @@ try:
     from classify_matches import PrepareModelTask
     from classify_matches import ClassifyTargetWithModelTask
     from classify_matches import ModelDiagnosticsTask
+    from classify_matches import CompareModelsDiagnosticTask
 except ImportError, e:
     exception = ImportErrorWrapperException(str(e))
     print(exception)
@@ -150,6 +151,7 @@ def build_model_app_function(
     model_file = prepare_model_file(
         postprocessed_ions_file, method=method, out=out)
     print(model_file)
+    return model_file
 
 
 def classify_with_model_app_function(
@@ -175,6 +177,7 @@ def classify_with_model_app_function(
         postprocessed_ions_file, method=method,
         model_file_path=model_file, out=out)
     print(classification_results_file)
+    return classification_results_file
 
 
 def reclassify_with_model_app_function(target_file, method="full_random_forest", model_file=None, out=None):
@@ -184,12 +187,14 @@ def reclassify_with_model_app_function(target_file, method="full_random_forest",
         target_file, method=method,
         model_file_path=model_file, out=out)
     print(classification_results_file)
+    return classification_results_file
 
 
 def model_diagnostics_app_function(model_file, method="full_random_forest"):
     task = ModelDiagnosticsTask(model_file_path=model_file, method=method)
     result = task.run()
     print(result)
+    return result
 
 
 def main():

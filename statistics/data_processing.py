@@ -1,12 +1,17 @@
-import re
-from os.path import splitext
 import json
+from math import fabs
+import re
 
 import pandas as pd
 import numpy as np
 
-from .sequence_handling import get_sequence_length, get_modification_signature
+from .sequence_handling import get_sequence_length
+from .sequence_handling import modification_signature
+from .sequence_handling import glycosites
+from .sequence_handling import percent_expected_ions_with_hexnac_observed
 
+from ..structure import sequence
+from ..structure import modification
 
 # Defines the list of fields that must be JSON encoded and decoded
 # for storage in CSV files. Because regular scientists cannot possibly
@@ -104,8 +109,10 @@ def prepare_model_file(path):
         data["numStubs"] = map(len, data["Stub_ions"])
     if "percent_b_ion_coverage" not in data:
         shim_percent_calcs(data)
-    get_ion_coverage_score(data)
-    get_modification_signature(data)
+    data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(glycosites)
+    ion_coverage_score(data)
+    modification_signature(data)
+    infer_glycan_mass(data)
 
     return data
 
@@ -118,7 +125,7 @@ def save_model_file(data_struct, path):
     write_copy.to_csv(path, index=False, encoding="utf-8")
 
 
-def get_ion_coverage_score(data_struct):
+def ion_coverage_score(data_struct):
     coverage_data = data_struct.apply(compute_ion_coverage_map, 1)
     data_struct['meanCoverage'] = coverage_data["meanCoverage"]
     data_struct['percentUncovered'] = coverage_data["percentUncovered"]
@@ -126,9 +133,11 @@ def get_ion_coverage_score(data_struct):
     data_struct['peptideCoverageMap'] = coverage_data['peptideCoverageMap']
     data_struct['hexNAcCoverageMap'] = coverage_data['hexNAcCoverageMap']
     data_struct["bIonCoverageMap"] = coverage_data["bIonCoverage"]
-    data_struct["bIonCoverageWithHexNAcMap"] = coverage_data["bIonCoverageWithHexNAc"]
+    data_struct["bIonCoverageWithHexNAcMap"] = coverage_data[
+        "bIonCoverageWithHexNAc"]
     data_struct["yIonCoverageMap"] = coverage_data["yIonCoverage"]
-    data_struct["yIonCoverageWithHexNAcMap"] = coverage_data["yIonCoverageWithHexNAc"]
+    data_struct["yIonCoverageWithHexNAcMap"] = coverage_data[
+        "yIonCoverageWithHexNAc"]
     return data_struct
 
 
@@ -163,20 +172,30 @@ def compute_ion_coverage_map(row):
         ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0])] = 1
         y_ions_with_HexNAc += ion
 
-    total_coverage += b_ion_coverage + b_ions_with_HexNAc
+    total_coverage += b_ion_coverage.astype(
+        np.int32) | b_ions_with_HexNAc.astype(np.int32)
     total_coverage += y_ion_coverage[
-        ::-1] + y_ions_with_HexNAc[::-1]  # Reverse
+        ::-1].astype(np.int32) | y_ions_with_HexNAc[::-1].astype(np.int32)  # Reverse
+
+    b_ions_covered = sum((b_ion_coverage.astype(
+        np.int32) | b_ions_with_HexNAc.astype(np.int32)) != 0)
+
+    y_ions_covered = sum((y_ion_coverage[
+        ::-1].astype(np.int32) | y_ions_with_HexNAc[::-1].astype(np.int32)) != 0)
+
+    expected_ions = (peptide_length * 2.0) - 1
+    percent_expected_observed = (b_ions_covered + y_ions_covered) / expected_ions
 
     percent_uncovered = (sum(total_coverage == 0) / float(peptide_length))
     mean_coverage = total_coverage.mean() / (float(peptide_length))
 
-    hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1])
-    # The denominator factor here needs to be looked at more closely.
-    mean_hexnac_coverage = hexnac_coverage.mean(
-    ) / (float(peptide_length / 2.0))
+    hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1])/2.
+
+    mean_hexnac_coverage = percent_expected_ions_with_hexnac_observed(row)
 
     return pd.Series({"meanCoverage": mean_coverage,
                       "percentUncovered": percent_uncovered,
+                      "percentExpectedObserved": percent_expected_observed,
                       "meanHexNAcCoverage": mean_hexnac_coverage,
                       "peptideCoverageMap": list(total_coverage),
                       "hexNAcCoverageMap": list(hexnac_coverage),
@@ -253,3 +272,30 @@ def call_by_coverage(data_struct, criterion_fn=None):
     else:
         call = data_struct.apply(criterion_fn, 1)
     return call
+
+
+def infer_glycan_mass(data_struct):
+    hexNAc_mass = modification.ModificationTable.bootstrap()["HexNAc"].mass
+    glycopeptide_mass = data_struct.Glycopeptide_identifier.apply(lambda x: sequence.Sequence(x).mass)
+    glycan_mass = data_struct.Calc_mass - (glycopeptide_mass - (data_struct.glyco_sites * hexNAc_mass))
+    data_struct["glycanMass"] = glycan_mass
+    return data_struct
+
+
+#TODO
+def recalibrate_mass_accuracy(data_struct, ms1_tolerance, ms2_tolerance):
+    ms1_recalibrated = data_struct.ppm_error.abs() <= ms1_tolerance
+    recalibrated = data_struct.ix[ms1_recalibrated].apply(
+        filter_tandem_matches_by_ppm, 1, args=(ms2_tolerance))
+    ion_coverage_score(recalibrated)
+    recalibrated.noise_filter = None
+    recalibrated.MS2_Score = None
+
+
+def filter_tandem_matches_by_ppm(row, ms2_tolerance):
+    for ion_type in ["Oxonium_ions", "Stub_ions",
+                     "b_ion_coverage", "b_ions_with_HexNAc",
+                     "y_ion_coverage", "y_ions_with_HexNAc"]:
+        row[ion_type] = [
+            ion for ion in row[ion_type] if fabs(ion['ppm_error']) <= ms2_tolerance]
+    return row

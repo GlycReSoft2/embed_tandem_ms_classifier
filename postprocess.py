@@ -62,6 +62,8 @@ def main(matched_ions_file, output_file=None):
         glycans = re.findall('\\b\\d+\\b', rows["Glycan"])
         NeuAc = int(glycans[3])
 
+        bad_oxonium_ions = []
+
         # checking for oxonium ions, if less than 2, MS2 score = 0
         if len(Oxoniums) < 2:
             MS2_score = 0.0
@@ -77,11 +79,7 @@ def main(matched_ions_file, output_file=None):
                 pass
 
             else:
-                if any(d['key'] == 274.092 or d["key"] == 292.1026 for d in Oxoniums):
-                    MS2_score -= 0.2
-
-                else:
-                    pass
+                bad_oxonium_ions.extend(d for d in Oxoniums if d['key'] == 274.092 or d["key"] == 292.1026)
 
         if (y_HexNAc_found == 0 and b_HexNAc_found == 0):
             pass
@@ -118,44 +116,13 @@ def main(matched_ions_file, output_file=None):
                                "percent_y_ion_coverage": percent_y,
                                "#_of_stubs_found": stubs_found,
                                "scan_id": rows['scan_id'],
-                               "scan_id_range": json.dumps(ast.literal_eval(rows["scan_id_range"]))
+                               "scan_id_range": json.dumps(ast.literal_eval(rows["scan_id_range"])),
+                               "bad_oxonium_ions": bad_oxonium_ions
                                })
 
-    keys = [
-        "MS1_Score",
-        "Obs_Mass",
-        "Calc_mass",
-        "ppm_error",
-        "Peptide",
-        "Peptide_mod",
-        "Glycan",
-        "vol",
-        "glyco_sites",
-        "startAA",
-        "endAA",
-        "Seq_with_mod",
-        "Glycopeptide_identifier",
-        "Oxonium_ions",
-        "bare_b_ions",
-        "total_b_ions_possible",
-        "bare_y_ions",
-        "total_y_ions_possible",
-        "b_ions_with_HexNAc",
-        "y_ions_with_HexNAc",
-        "b_ion_coverage",
-        "y_ion_coverage",
-        "Stub_ions",
-        "percent_b_ion_with_HexNAc_coverage",
-        "percent_y_ion_with_HexNAc_coverage",
-        "percent_b_ion_coverage",
-        "percent_y_ion_coverage",
-        "#_of_stubs_found",
-        'scan_id',
-        "scan_id_range"]
-
     f = open(output_file + ".csv", 'wb')
-    dict_writer = csv.DictWriter(f, keys)
-    dict_writer.writer.writerow(keys)
+    dict_writer = csv.DictWriter(f, scored_results[0].keys())
+    dict_writer.writeheader()
     dict_writer.writerows(scored_results)
     f.close()
 

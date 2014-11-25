@@ -80,7 +80,8 @@ def Mergedicts(dicts_to_merge):
             break
     if allzero:
         dicts_to_merge = []
-    # if the dicts_to_merge is empty anyway, just return the same dicts_to_merge back.
+    # if the dicts_to_merge is empty anyway, just return the same
+    # dicts_to_merge back.
         return dicts_to_merge
     else:
         for row in dicts_to_merge:
@@ -110,9 +111,9 @@ def Mergedicts(dicts_to_merge):
         # 'key': 'B7', 'obs_ion': 922.376038035}, {'ppm_error':
         # 1.0112467130843996e-05, 'key': 'B14', 'obs_ion': 1741.8025510349999}]
         for row in dicts_to_merge:
-        # each of the "ReadingItems and firstrowReadingItems" should be
-        # something like this: {'ppm_error': -3.3899212497496274e-06, 'key':
-        # 'B3', 'obs_ion'}: 372.150116035}. If not, plz tell me.
+            # each of the "ReadingItems and firstrowReadingItems" should be
+            # something like this: {'ppm_error': -3.3899212497496274e-06, 'key':
+            # 'B3', 'obs_ion'}: 372.150116035}. If not, plz tell me.
             if len(row) != 0:
                 for ReadingItems in row:
                     same_key_exists = False
@@ -135,10 +136,12 @@ def Mergedicts(dicts_to_merge):
             Finalfirstrow.append(items)
     return Finalfirstrow
 
-## TODO:
-## Profile how scan_id spreads across merges
-## Look at how much information can be discerned across time between two ambiguous matches
-## Propagate this data along to downstream steps
+# TODO:
+# Profile how scan_id spreads across merges
+# Look at how much information can be discerned across time between two ambiguous matches
+# Propagate this data along to downstream steps
+
+
 def MergeRows(SourceData):
     # for row in range(len(SourceData)):
     #	print(SourceData[row]['MS1_Score'], SourceData[row]['bare_b_ions'], "\n")
@@ -251,9 +254,9 @@ def MergeRows(SourceData):
 
 def split_decon_data_by_index(decon_data, splitting_index):
     '''
-        It might be useful to know which scans in the data matched and which did not.
-        :param decon_data: dict-like yaml data describing the deconvoluted spectra we matched against
-        :param splitting_index: dict-like record of which peaks matched
+    It might be useful to know which scans in the data matched and which did not.
+    :param decon_data: dict-like yaml data describing the deconvoluted spectra we matched against
+    :param splitting_index: dict-like record of which peaks matched
     '''
     matched = []
     no_matched = []
@@ -295,9 +298,9 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
     # reading each line in theoretical ions file generated from gly1 results
     for line_no, lines in enumerate(f_csv):
         try:
-            obs_mass = float(lines['Obs_Mass'])
+            obs_mass = float(lines['Calc_mass'])
         except:
-            print(lines["Obs_Mass"], line_no)
+            print(lines["Calc_mass"], line_no)
             print(lines)
             raise
         for tandem_ms_ind, more in enumerate(data['peaks']):
@@ -309,14 +312,14 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
 
             # this takes the information from the first scan in case there
             # are multiple merged scans
-            info = more['scans'][:1]
-            for num in info:
-                charge = num['z']
-                mass = num['mz']
-                ntr_mass = ((mass * charge) - (charge * Proton))
-                ppm = ((ntr_mass - obs_mass) / ntr_mass)
+            num = more['scans'][0]
+            # for num in info:
+            charge = num['z']
+            mass = num['mz']
+            ntr_mass = ((mass * charge) - (charge * Proton))
+            precursor_ppm = ((ntr_mass - obs_mass) / ntr_mass)
 
-            if math.fabs(ppm) <= ms1_tolerance:
+            if math.fabs(precursor_ppm) <= ms1_tolerance:
                 did_match_cache[tandem_ms_ind] += 1
                 Oxonium_ions = ast.literal_eval(lines['Oxonium_ions'])
 
@@ -326,7 +329,8 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                                  in izip(more["mass"], more["z"], more["intensity"])
                                  if ion[1] <= charge and ion[0] < MACHINE_ACQUISITION_RANGE]
                 except Exception, e:
-                    logging.info("An error occurred while trying to filter ions")
+                    logging.info(
+                        "An error occurred while trying to filter ions")
                     logging.exception(e)
                     real_ions = more["mass"]
 
@@ -337,7 +341,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                             ((ob_ions + Proton) - ox_ion) / (ob_ions + Proton))
                         if math.fabs(oxonium_ppm) <= ms2_tolerance:
                             oxoniums.append(
-                                {"ion": (ob_ions + Proton), "ppm_error": oxonium_ppm, "key": ox_ion})
+                                {"ion": (ob_ions + Proton), "ppm_error": oxonium_ppm * 1e6, "key": ox_ion})
 
                 # checking for b and y ions and ions with HexNAc:
                 b_ions = ast.literal_eval(lines['bare_b_ions'])
@@ -352,9 +356,11 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                             (obs_ions - (prot_ion)) / obs_ions)
                         if math.fabs(tandem_ppm) <= ms2_tolerance:
                             b_type.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
                             all_b_ions.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
 
                 b_HexNAc_ions = ast.literal_eval(
                     lines['b_ions_with_HexNAc'])
@@ -367,11 +373,12 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                             (obs_ions - (prot_ion)) / obs_ions)
                         if math.fabs(tandem_ppm) <= ms2_tolerance:
                             b_HexNAc_type.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
                             all_b_ions.append(
                                 {"obs_ion": (obs_ions + Proton),
                                  "key": theo_ions["key"].split("+")[0],
-                                 "ppm_error": tandem_ppm})
+                                 "ppm_error": tandem_ppm * 1e6})
 
                 y_ions = list(ast.literal_eval(lines['bare_y_ions']))
                 y_len = float(len(y_ions))
@@ -385,9 +392,11 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                             (obs_ions - (prot_ion)) / obs_ions)
                         if math.fabs(tandem_ppm) <= ms2_tolerance:
                             y_type.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
                             all_y_ions.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
 
                 y_HexNAc_ions = ast.literal_eval(
                     lines['y_ions_with_HexNAc'])
@@ -400,11 +409,12 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                             (obs_ions - (prot_ion)) / obs_ions)
                         if math.fabs(tandem_ppm) <= ms2_tolerance:
                             y_HexNAc_type.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
                             all_y_ions.append(
                                 {"obs_ion": (obs_ions + Proton),
                                  "key": theo_ions["key"].split("+")[0],
-                                 "ppm_error": tandem_ppm})
+                                 "ppm_error": tandem_ppm * 1e6})
 
                 # checking for stub ions
                 stub_ions = ast.literal_eval(lines['pep_stub_ions'])
@@ -417,7 +427,8 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                             (obs_ions - (prot_ion)) / obs_ions)
                         if math.fabs(tandem_ppm) <= ms2_tolerance:
                             stub_type.append(
-                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"], "ppm_error": tandem_ppm})
+                                {"obs_ion": (obs_ions + Proton), "key": theo_ions["key"],
+                                 "ppm_error": tandem_ppm * 1e6})
 
                 results.append(
                     {"MS1_Score": lines["MS1_Score"], "Obs_Mass": lines["Obs_Mass"],
@@ -441,12 +452,14 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
                 pass
 
     if(len(results) < 1):
-        raise NoIonsMatchedException("No matches found from theoretical ions in MS2 deconvoluted results")
+        raise NoIonsMatchedException(
+            "No matches found from theoretical ions in MS2 deconvoluted results")
 
     merged_results = MergeRows(results)
 
     keys = [
-        "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "Peptide", "Peptide_mod", "Glycan", "vol", "glyco_sites",
+        "MS1_Score", "Obs_Mass", "Calc_mass", "ppm_error", "_old_ppm_error", "Peptide",
+        "Peptide_mod", "Glycan", "vol", "glyco_sites",
         "startAA", "endAA", "Seq_with_mod", "Glycopeptide_identifier", "Oxonium_ions",
         "bare_b_ions", "possible_b_ions_HexNAc", "total_b_ions", "bare_y_ions", "possible_y_ions_HexNAc",
         "total_y_ions", "b_ions_with_HexNAc", "y_ions_with_HexNAc", "b_ion_coverage", "y_ion_coverage",

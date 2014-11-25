@@ -4,7 +4,7 @@ import os
 from collections import OrderedDict
 from operator import itemgetter
 
-from structure.modification import AnonymousModificationRule
+from .modification import AnonymousModificationRule
 
 mammalian_glycomedb_nlinked_path = os.path.join(os.path.dirname(__file__), "data", "Mammalian_GlycomeDB_NLinked.csv")
 
@@ -65,6 +65,10 @@ class GlycanHypothesis(list):
     def extract_glycans(self):
         self.glycans = list({SimpleGlycan(float(r["Molecular Weight"]), r["Compositions"]) for r in self})
         return self.glycans
+
+
+def glycan_from_predictions(classify_matches_data):
+    return classify_matches_data.apply(lambda x: SimpleGlycan(x.glycanMass, x.Glycan), 1).tolist()
 
 
 def load_from_file(path_to_file=mammalian_glycomedb_nlinked_path):

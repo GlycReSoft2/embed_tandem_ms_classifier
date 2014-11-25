@@ -1,5 +1,5 @@
 import re
-from utils.memoize import memoize
+from ..utils.memoize import memoize
 
 # This pattern will match an uppercase character followed by 0 or more
 # lowercase characters denoting the element/group, followed by 0 or more

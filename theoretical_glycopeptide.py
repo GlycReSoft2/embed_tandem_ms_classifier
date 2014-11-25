@@ -219,7 +219,6 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
             pep_stubs = StubGlycopeptide(seq_str, pep_mod, num_sites, glycan_comp)
             stub_ions = pep_stubs.get_stubs()
             oxonium_ions = pep_stubs.get_oxonium_ions()
-
             fragment_info.append(
                 {"MS1_Score": score, "Obs_Mass": precur_mass, "Calc_mass": theo_mass, "ppm_error": mass_error,
                  "Peptide": seq_str, "Peptide_mod": pep_mod, "Glycan": glycan_comp, "vol": volume,

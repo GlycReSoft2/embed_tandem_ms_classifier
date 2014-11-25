@@ -3,25 +3,34 @@ import itertools
 import random
 import re
 import time
+import logging
 
 from math import fabs
 
-from structure.sequence import sequence_to_mass
-from structure.sequence import sequence_tokenizer
-from structure.sequence import Sequence
-from structure.sequence import strip_modifications
+from .structure.sequence import sequence_to_mass
+from .structure.sequence import sequence_tokenizer
+from .structure.sequence import GrowingSequence as Sequence
+from .structure.sequence import Protease
+from .structure.sequence import strip_modifications
 
-from structure.sequence_space import SequenceSpace
-from structure.stub_glycopeptides import StubGlycopeptide
+from .structure.stub_glycopeptides import StubGlycopeptide
 
-from structure import modification
-from structure import residue
-from structure import glycan_masses as glycan_masses_provider
+from .structure.composition import Composition
+from .structure import modification
+from .structure import residue
+from .structure import glycan_masses as glycan_masses_provider
+
+from .utils.mass_heap import MassHeap
+from .classify_matches import prepare_model_file
 
 mammalian_glycans = glycan_masses_provider.load_from_file()
 
 residue_symbols = residue.symbol_to_residue
 smallest_mass = sequence_to_mass("G")
+
+
+def load_glycans_from_predictions(classify_matches_path):
+    return glycan_masses_provider.glycan_from_predictions(prepare_model_file(classify_matches_path))
 
 
 def generate_n_linked_sequons():
@@ -108,18 +117,24 @@ def generate_random_glycoforms(sequence, glycans):
             mod_seq = ""
             segments = partition(sequence, instance_sites)
             for within_site_iter in range(len(instance_sites)):
-                glycan_str = "(%s)" % glycans_to_add[within_site_iter].serialize()
+                glycan_str = "(%s)" % glycans_to_add[
+                    within_site_iter].serialize()
                 mod_seq += segments[within_site_iter] + glycan_str
             mod_seq += segments[-1]
             glycoforms.append(mod_seq)
     return glycoforms
 
 
-def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
-                                  count=20, constant_modifications=None,
-                                  variable_modifications=None, glycans=None,
-                                  min_length=0, cleavage_start=None, cleavage_end=None,
-                                  max_missed_cleavages=0):
+def has_glycan(sequence):
+    for mod_name, count in sequence.mod_index.items():
+        if ("Glycan" in mod_name) or ("HexNAc" in mod_name) and (count > 0):
+            return count
+    return False
+
+
+def generate_random_glycopeptides2(target_mass, ppm_error=10e-6, count=20, constant_modifications=None,
+                                   variable_modifications=None, glycans=None, min_length=0, cleavage_start=None,
+                                   cleavage_end=None, max_missed_cleavages=1, max_glycosylations=2):
     '''
     Given a target mass value and a tolerance threshold around it, create a set of random glycopeptides
     that satisfy the mass requirements.
@@ -131,7 +146,115 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
     else:
         constant_modifications = copy.deepcopy(constant_modifications)
     if variable_modifications is None:
-        variable_modifications = copy.deepcopy(modification.ModificationTable.bootstrap()).values()
+        variable_modifications = copy.deepcopy(
+            modification.ModificationTable.bootstrap()).values()
+    else:
+        variable_modifications = copy.deepcopy(variable_modifications)
+
+    if cleavage_start is None or len(cleavage_start) == 0:
+        cleavage_start = [""]
+
+    if cleavage_end is None or len(cleavage_end) == 0:
+        cleavage_end = [""]
+
+    cleavage_pattern = Protease(cleavage_start, cleavage_end)
+
+    variable_modifications = [
+        mod for mod in variable_modifications if mod.name != "HexNAc"]
+    constant_modifications = [
+        mod for mod in constant_modifications if mod.name != "HexNAc"]
+
+    components = MassHeap(map(lambda x: Sequence(x, cleavage_pattern), generate_component_set(
+        constant_modifications, variable_modifications)))
+    sequons = MassHeap(
+        map(lambda x: Sequence(x, cleavage_pattern),
+            itertools.chain.from_iterable(
+                map(lambda x: ("{0}({1}){2}".format(x[0], g.as_modification().serialize(), x[1:])
+                               for g in glycans),
+                    generate_n_linked_sequons()
+                    )
+            )
+            )
+    )
+
+    logging.info(components)
+    logging.info(sequons)
+
+    loc_fabs = fabs
+    water = Composition("H2O").mass
+
+    def reset_target_mass():
+        return (water + target_mass) - min(p.mass for p in candidate.pad())
+    solutions = set()
+    max_iter = count * 10000
+    iter_count = 0
+    candidate = Sequence("", cleavage_pattern)
+    mass_to_meet = reset_target_mass()
+    while(len(solutions) < count and iter_count < max_iter):
+        can_glycosylate = (len(candidate) > min_length / 3) and \
+            (has_glycan(candidate) < max_glycosylations) and \
+            (random.random() > .7)
+        #can_glycosylate = True
+        options = list(components.get_lower_than(mass_to_meet))
+
+        if(can_glycosylate):
+            glycosylated_options = list(sequons.get_lower_than(mass_to_meet))
+            options += glycosylated_options
+            #print("Can glycosylate! %s" % len(glycosylated_options))
+
+        logging.info("%s options for extension, mass to meet: %s, %s" % (len(options), mass_to_meet, str(candidate)))
+        next_part = random.choice(options)
+        candidate.extend(next_part)
+        mass_to_meet -= (next_part.mass - water)
+        # print(str(candidate), candidate.missed_cleavages, len(candidate))
+        # Reset, too many missed cleavages?
+        if candidate.missed_cleavages > max_missed_cleavages:
+            #print("Too many missed cleavages: %s, Reset!" % candidate.missed_cleavages)
+            candidate = Sequence("", cleavage_pattern)
+            mass_to_meet = reset_target_mass()
+
+        for padded_sequence in candidate.pad():
+            # Only consider glycosylated sequences
+            if has_glycan(candidate) < 1:
+                break
+
+            # Only consider longer sequences
+            if(len(padded_sequence) < min_length):
+                continue
+
+            error = loc_fabs(
+                (target_mass - padded_sequence.mass) / float(target_mass))
+            logging.info("%s, %s, %s" % (padded_sequence, padded_sequence.mass, error))
+            # Accept?
+            if error <= ppm_error:
+                print("Accepting %s %s" % (padded_sequence, padded_sequence.mass))
+                solutions.add(str(padded_sequence))
+
+        # Reset, too big?
+        if mass_to_meet < components[0].mass:
+            #print("Mass to Meet %s is too small, reset!" % mass_to_meet)
+            candidate = Sequence("", cleavage_pattern)
+            mass_to_meet = reset_target_mass()
+
+        iter_count += 1
+
+    return solutions
+
+
+def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, constant_modifications=None, variable_modifications=None, glycans=None, min_length=0, cleavage_start=None, cleavage_end=None, max_missed_cleavages=0):
+    '''
+    Given a target mass value and a tolerance threshold around it, create a set of random glycopeptides
+    that satisfy the mass requirements.
+    '''
+    if glycans is None:
+        glycans = mammalian_glycans
+    if constant_modifications is None:
+        constant_modifications = []
+    else:
+        constant_modifications = copy.deepcopy(constant_modifications)
+    if variable_modifications is None:
+        variable_modifications = copy.deepcopy(
+            modification.ModificationTable.bootstrap()).values()
     else:
         variable_modifications = copy.deepcopy(variable_modifications)
 
@@ -146,16 +269,21 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
     loc_gen_glycoforms = generate_random_glycoforms
     joiner = ''.join
 
-    variable_modifications = [mod for mod in variable_modifications if mod.name != "HexNAc"]
-    constant_modifications = [mod for mod in constant_modifications if mod.name != "HexNAc"]
+    variable_modifications = [
+        mod for mod in variable_modifications if mod.name != "HexNAc"]
+    constant_modifications = [
+        mod for mod in constant_modifications if mod.name != "HexNAc"]
 
-    components = generate_component_set(constant_modifications, variable_modifications)
+    components = generate_component_set(
+        constant_modifications, variable_modifications)
     amino_acid_components = components[:]
-    amino_acid_components = set(map(''.join, itertools.product(amino_acid_components + [""], repeat=4)))
+    amino_acid_components = set(
+        map(''.join, itertools.product(amino_acid_components + [""], repeat=4)))
     components.extend(generate_n_linked_sequons())
     smallest_mass = min(map(sequence_to_mass, components))
 
-    building_sequences = map(''.join, itertools.product(cleavage_start, components, components))
+    building_sequences = map(
+        ''.join, itertools.product(cleavage_start, components, components))
     random.shuffle(building_sequences)
     accepted_sequences = set()
     accept = accepted_sequences.add
@@ -171,16 +299,18 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
             print(seq)
         last_time = next_time
 
-        # If we've not filled the quota, reset and start building a new solution set.
+        # If we've not filled the quota, reset and start building a new
+        # solution set.
         if loc_fabs((min_mass - target_mass) / float(target_mass)) > ppm_error and min_mass > target_mass:
-            building_sequences = map(joiner, itertools.product(cleavage_start, components, components))
+            building_sequences = map(
+                joiner, itertools.product(cleavage_start, components, components))
             resets += 1
             print("Reset!")
 
         # Keep the number of random sequences in memory down
         current_min_mass = float('inf')
         try:
-            #random.shuffle(building_sequences)
+            # random.shuffle(building_sequences)
             building_sequences = random.sample(building_sequences, 10000)
         except:
             pass
@@ -192,25 +322,31 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
         building_sequences = []
         append_build = building_sequences.append
         extend_build = building_sequences.extend
-        # Consider every currently growing sequence combined with every possible amino acid building block
+        # Consider every currently growing sequence combined with every
+        # possible amino acid building block
         for sequence in itertools.product(next_sequences, components):
             sequence = joiner(sequence)
             missed_cleavages = count_missed_cleavages(sequence, cleavage_end)
             if missed_cleavages > max_missed_cleavages:
                 continue
-            sequence_realizations = [sequence] + loc_gen_glycoforms(sequence, glycans)
+            sequence_realizations = [sequence] + \
+                loc_gen_glycoforms(sequence, glycans)
             for sequence_inst in sequence_realizations:
                 try:
                     mass = loc_sequence_to_mass(sequence_inst)
                     #print("Crunching %s (%s)" % (sequence_inst, mass))
                 except Exception, e:
-                    print("An error occurred during massing of %s" % sequence_inst)
+                    print("An error occurred during massing of %s" %
+                          sequence_inst)
                     print(e)
                     raise
                 for sequence_inst_capped in itertools.product([sequence_inst], cleavage_end):
-                    inst_mass = mass + loc_sequence_to_mass(sequence_inst_capped[1])
-                    # Decide whether the current sequence is a possible solution
-                    error = loc_fabs((inst_mass - target_mass) / float(target_mass))
+                    inst_mass = mass + \
+                        loc_sequence_to_mass(sequence_inst_capped[1])
+                    # Decide whether the current sequence is a possible
+                    # solution
+                    error = loc_fabs(
+                        (inst_mass - target_mass) / float(target_mass))
                     if error < ppm_error and is_glycosylated(sequence_inst):
                         accepted = joiner(sequence_inst_capped)
                         print(accepted)
@@ -218,8 +354,9 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6,
             # Decide whether the current sequence can be used to build a
             # longer possible solution. Don't save glycoforms.
             if (mass + smallest_mass) < target_mass:
-                if(mass < (target_mass/2)):
-                    extend_build(joiner(p) for p in itertools.product([sequence_inst], amino_acid_components))
+                if(mass < (target_mass / 2)):
+                    extend_build(joiner(p) for p in itertools.product(
+                        [sequence_inst], amino_acid_components))
                 else:
                     append_build(sequence_inst)
 
@@ -253,7 +390,8 @@ def random_glycopeptide_to_sequence_space(sequence, glycan_string=None, obs_mass
                 why = mod.why_valid(aa, i)
                 modifications.append(modification.Modification(why, (i,)))
 
-    # Remove glycans from the sequence string to conform to the SequenceSpace expectations
+    # Remove glycans from the sequence string to conform to the SequenceSpace
+    # expectations
     for site, glycan in glycan_map.items():
         # Don't discard anonymous HexNAcs. Downstream functions can handle them
         if glycan != "HexNAc":
@@ -265,7 +403,8 @@ def random_glycopeptide_to_sequence_space(sequence, glycan_string=None, obs_mass
         glycan_composition = [map(int, glycan.replace("Glycan", '').replace("[", "").replace("]", "").split(";"))
                               for glycan in glycan_map.values()]
         glycan_composition = map(sum, zip(*glycan_composition))
-        glycan_composition_restring = "[" + ";".join(map(str, glycan_composition)) + "]"
+        glycan_composition_restring = "[" + \
+            ";".join(map(str, glycan_composition)) + "]"
     else:
         glycan_composition_restring = glycan_string
     # Begin generating fragment ions
@@ -305,12 +444,12 @@ def random_glycopeptide_to_sequence_space(sequence, glycan_string=None, obs_mass
     ions = {
         "MS1_Score": ms1_score,
         "Obs_Mass": obs_mass if obs_mass is not None else seq_obj.get_mass(),
-        "Calc_mass": None,
+        "Calc_mass": seq_obj.get_mass(),
         "ppm_error": ppm_error,
         "Peptide": peptide_seq,
         "Peptide_mod": None,
         "Glycan": glycan_composition_restring,
-        "vol": None,
+        "vol": 1,
         "glyco_sites": len(glycan_map),
         "startAA": None,
         "endAA": None,
@@ -329,7 +468,8 @@ def random_glycopeptide_to_sequence_space(sequence, glycan_string=None, obs_mass
 def process_task(param, tolerance=5.0, number=20, *args, **kwargs):
     try:
         mass, count = param
-        sequences = generate_random_glycopeptides(mass, tolerance, tolerance, count=count * number)
+        sequences = generate_random_glycopeptides(
+            mass, tolerance, tolerance, count=count * number)
     except Exception, e:
         sequences = []
         print(e, mass, count)
@@ -349,9 +489,11 @@ if __name__ == '__main__':
     app.add_argument("input_file")
     app.add_argument("-t", "--tolerance", type=float, default=5.0,
                      help="Tolerance range around the parameter mass to accept random glycopeptides")
-    app.add_argument("-n", "--number", type=int, default=20, help="Number of random glycopeptides per match")
+    app.add_argument("-n", "--number", type=int, default=20,
+                     help="Number of random glycopeptides per match")
     app.add_argument("-o", "--outfile", type=str, default=None, required=False)
-    app.add_argument("-c", "--cores", type=int, default=1, required=False, help="Number of cores to use")
+    app.add_argument("-c", "--cores", type=int, default=1,
+                     required=False, help="Number of cores to use")
 
     args = app.parse_args()
     args.cores = cpu_count() if args.cores > cpu_count() else args.cores

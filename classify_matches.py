@@ -1,11 +1,13 @@
 from os.path import splitext
 import numpy as np
 from matplotlib import pyplot as plt
+from sklearn.linear_model import LinearRegression
 
 from statistics import *
 
 
 class ModelTask(object):
+
     '''Base Class for representing tasks ran about a model.'''
     method_table = methods
 
@@ -196,3 +198,36 @@ class ModelDiagnosticsTask(ModelTask):
         self.plot_error_rate(self.axes[1])
         self.save_figure()
         return self.output_path
+
+
+class CompareModelsDiagnosticTask(ModelDiagnosticsTask):
+
+    def __init__(self, model_file_path, labeled_file_path, method="full_random_forest",
+                 output_path=None, method_init_args=None, method_fit_args=None):
+        if output_path is None:
+            output_path = splitext(
+                splitext(model_file_path)[0])[0] + ".errors_%s.png" % method
+        super(CompareModelsDiagnosticTask, self).__init__(model_file_path, method,
+                                                          output_path, method_init_args, method_fit_args)
+        self.labeled_file_path = labeled_file_path
+
+    def plot_error_rate(self, ax):
+        width = 0.3
+        labeled_frame = prepare_model_file(self.labeled_file_path)
+        model_conf_matrix = generate_confusion_matrix(
+            self.classifier, labeled_frame, self.model_formula)
+        # True Positive, False Negative, False Positive, True Negative
+        model_conf_measures = [model_conf_matrix[0, 0], model_conf_matrix
+                               [0, 1], model_conf_matrix[1, 0], model_conf_matrix[1, 1]]
+
+        #print((self.model_frame['call'] == True).sum(), self.model_frame['call'].count())
+
+        model_rects = ax.bar(np.arange(len(model_conf_measures)),
+                             model_conf_measures,
+                             width=width, align="center", color='green')
+
+        ax.set_title("Classifier Performance Rates")
+        ax.set_xticks(np.arange(len(model_conf_measures)))
+        ax.set_xticklabels(["TPR", "FPR", "FNR", "TNR"])
+        ax.set_ylabel("Number of observations")
+        ax.autoscale()

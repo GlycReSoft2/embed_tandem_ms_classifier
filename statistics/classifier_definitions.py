@@ -14,7 +14,8 @@ model_definitions = {
     "full": [
         "meanCoverage",
         "percentUncovered",
-        "abs_ppm_error",
+        #"abs_ppm_error",
+        "ppm_error",
         "meanHexNAcCoverage",
         "peptideLens"
     ],

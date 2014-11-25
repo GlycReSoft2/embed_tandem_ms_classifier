@@ -1,6 +1,6 @@
-from structure import ResidueBase
-from structure.composition import Composition, composition_to_mass
-from utils.memoize import memoize
+from . import ResidueBase
+from .composition import Composition, composition_to_mass
+from ..utils.memoize import memoize
 
 symbol_to_residue = {
     'A': 'Ala',

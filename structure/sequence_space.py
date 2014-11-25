@@ -1,11 +1,8 @@
 import copy
 import itertools
 
-from structure.modification import Modification, ModificationTable
-from structure.sequence import Sequence
-
-import IPython
-
+from .modification import Modification, ModificationTable
+from .sequence import Sequence
 
 class SequenceSpace:
     """Generate all theoretical glycopeptide sequences"""

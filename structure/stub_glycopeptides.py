@@ -1,6 +1,6 @@
-from structure.modification import Modification
-from structure.composition import Composition
-from structure.residue import Residue
+from .modification import Modification
+from .composition import Composition
+from .residue import Residue
 import re
 
 Deamidation = 0.9840099999999978
