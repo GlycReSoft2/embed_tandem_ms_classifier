@@ -1,2 +1,0 @@
-GlycReSoftMS2Classification
-pyyaml
