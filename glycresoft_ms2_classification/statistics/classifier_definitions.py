@@ -30,7 +30,7 @@ fitting_functions = []
 
 def fit_random_forest(
     data_struct, formula=None, max_features='auto', oob_score=True,
-    n_estimators=100, criterion="entropy", n_jobs=2, model_init_args=None,
+    n_estimators=100, criterion="entropy", n_jobs=1, model_init_args=None,
         model_fit_args=None):
     if formula is None:
         formula = model_definitions['full']
@@ -85,7 +85,7 @@ def fit_logistic_regression(data_struct, formula=None, model_init_args=None, mod
         model_init_args = dict()
     if model_fit_args is None:
         model_fit_args = dict()
-    model_init_args["penalty"] = model_init_args.get("penalty", "l1")
+    model_init_args["penalty"] = model_init_args.get("penalty", "l2")
     log_reg = LogisticRegression(**model_init_args)
     log_reg.fit(data_struct[formula], data_struct["call"], **model_fit_args)
     return log_reg

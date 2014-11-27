@@ -6,7 +6,6 @@ import sys
 # pip or easy_install?
 sys.path = [(os.path.dirname(os.path.abspath(__file__)))] + sys.path
 
-
 #import atexit
 import json
 
@@ -24,7 +23,6 @@ try:
     # Pipeline Steps as Modules
     from structure.sequence_space import UnqualifiedModifierException
     from structure.sequence_space import NoSitesFoundException
-
     from protein_prospector.xml_parser import MSDigestParamters
 
     import theoretical_glycopeptide
@@ -33,7 +31,7 @@ try:
     from classify_matches import PrepareModelTask
     from classify_matches import ClassifyTargetWithModelTask
     from classify_matches import ModelDiagnosticsTask
-    from classify_matches import CompareModelsDiagnosticTask
+    #from classify_matches import CompareModelsDiagnosticTask
 except ImportError, e:
     exception = ImportErrorWrapperException(str(e))
     print(exception)
@@ -298,7 +296,6 @@ def main():
     model_diagnostics_app.add_argument("--model-file",
                                        action="store", default=None, required=True)
     model_diagnostics_app.set_defaults(func=model_diagnostics_app_function)
-
     try:
         # Always generate an error map file on run, for sanity's sake. But users may not have write-access
         # to the install directory. Need to use tempfile or other source?
@@ -332,6 +329,8 @@ def main():
     except GlycReSoftInterprocessCommunicationException, e:
         print(e)
         exit(e.errcode)
+    except Exception, e:
+        exit(-255)
     exit(0)
 
 if __name__ == '__main__':

@@ -1,9 +1,14 @@
 from os.path import splitext
 import numpy as np
 from matplotlib import pyplot as plt
-from sklearn.linear_model import LinearRegression
 
-from statistics import *
+from .statistics import prepare_model_file, save_model_file
+from .statistics import methods
+from .statistics import call_by_coverage
+from .statistics import determine_ambiguity
+from .statistics import model_definitions
+from .statistics import generate_confusion_matrix
+from .statistics import classify_with_model, generate_null_model
 
 
 class ModelTask(object):
@@ -222,9 +227,9 @@ class CompareModelsDiagnosticTask(ModelDiagnosticsTask):
 
         #print((self.model_frame['call'] == True).sum(), self.model_frame['call'].count())
 
-        model_rects = ax.bar(np.arange(len(model_conf_measures)),
-                             model_conf_measures,
-                             width=width, align="center", color='green')
+        ax.bar(np.arange(len(model_conf_measures)),
+               model_conf_measures,
+               width=width, align="center", color='green')
 
         ax.set_title("Classifier Performance Rates")
         ax.set_xticks(np.arange(len(model_conf_measures)))
