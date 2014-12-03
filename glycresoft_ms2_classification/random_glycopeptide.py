@@ -21,19 +21,19 @@ from .structure.composition import Composition
 from .structure import modification
 from .structure import residue
 
-from .structure import glycan_masses as glycan_masses_provider
+from .structure import glycans as glycan_lib
 
 from .utils.mass_heap import MassHeap
 from .classify_matches import prepare_model_file
 
-mammalian_glycans = glycan_masses_provider.load_from_file()
+mammalian_glycans = glycan_lib.load_from_file()
 
 residue_symbols = residue.symbol_to_residue
 smallest_mass = sequence_to_mass("G")
 
 
 def load_glycans_from_predictions(classify_matches_path):
-    return glycan_masses_provider.glycan_from_predictions(prepare_model_file(classify_matches_path))
+    return glycan_lib.glycan_from_predictions(prepare_model_file(classify_matches_path))
 
 
 def generate_n_linked_sequons():
@@ -112,8 +112,8 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
                                for g in glycans),
                     generate_n_linked_sequons()
                     )
-        )
-        )
+            )
+            )
     )
 
     logging.info(components)

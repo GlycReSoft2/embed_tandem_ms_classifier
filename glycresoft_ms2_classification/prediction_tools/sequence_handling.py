@@ -22,7 +22,7 @@ def sequence_tokenizer(sequence):
     i = 0
     while i < len(sequence):
         next_char = sequence[i]
-        if next_char is "(":
+        if next_char == "(":
             if state == "aa":
                 state = "mod"
                 assert paren_level == 0
@@ -33,7 +33,7 @@ def sequence_tokenizer(sequence):
         elif next_char == ")":
             if state == "aa":
                 raise Exception(
-                    "Invalid Sequence. ) found outside of modification.")
+                    "Invalid Sequence. ) found outside of modification, Position {0}. {1}".format(i, sequence))
             elif state == "mod":
                 paren_level -= 1
                 if paren_level == 0:
@@ -108,7 +108,7 @@ def percent_expected_ions_with_hexnac_observed(row):
     # if(expected_y_hexnac < 2):
     #     print("{seq} does not generate good y ions with hexnac".format(seq=row.Glycopeptide_identifier))
 
-    percent_expected_observed = (b_ions_hexnac_observed + y_ions_hexnac_observed) /\
-        float(expected_b_hexnac + expected_y_hexnac)
+    percent_expected_observed = (b_ions_hexnac_observed + y_ions_hexnac_observed) \
+        / float(expected_b_hexnac + expected_y_hexnac)
 
     return percent_expected_observed

@@ -7,7 +7,7 @@ from os.path import splitext
 from collections import Counter
 from itertools import izip
 
-import tempfile
+
 import logging
 try:
     logging.basicConfig(stream=open("match-log.txt", 'w'), level=logging.INFO)
@@ -318,7 +318,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
             mass = num['mz']
             ntr_mass = ((mass * charge) - (charge * Proton))
             precursor_ppm = ((ntr_mass - obs_mass) / ntr_mass)
-
+            
             if math.fabs(precursor_ppm) <= ms1_tolerance:
                 did_match_cache[tandem_ms_ind] += 1
                 Oxonium_ions = ast.literal_eval(lines['Oxonium_ions'])

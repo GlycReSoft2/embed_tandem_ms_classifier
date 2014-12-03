@@ -499,7 +499,7 @@ class Modification(ModificationBase):
         return mass
 
     def __init__(self, rule, mod_pos=-1, mod_num=1):
-        if(isinstance(rule, str)):
+        if(isinstance(rule, basestring)):
             try:
                 rule = Modification._table[rule]
             except KeyError:
@@ -508,6 +508,7 @@ class Modification(ModificationBase):
                     raise Exception(
                         "Could not resolve Modification Name: %s" % rule)
                 rule = anon
+
         self.name = rule.name
         self.mass = rule.mass
         self.position = mod_pos

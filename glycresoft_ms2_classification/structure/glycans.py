@@ -1,5 +1,6 @@
 import csv
 import os
+import re
 
 from collections import OrderedDict
 from operator import itemgetter
@@ -74,3 +75,13 @@ def glycan_from_predictions(classify_matches_data):
 def load_from_file(path_to_file=mammalian_glycomedb_nlinked_path):
     gh = GlycanHypothesis(path_to_file)
     return gh.glycans
+
+
+def pack_glycan_string(glycan_map, glycan_order):
+    pack_string = "[{0}]".format(";".join([glycan_map[g] for g in glycan_order]))
+    return pack_string
+
+
+def parse_glycan_pack_string(pack_string, glycan_order):
+    glycan_map = {g: int(c) for g, c in zip(glycan_order, re.findall('\\b\\d+\\b', pack_string))}
+    return glycan_map

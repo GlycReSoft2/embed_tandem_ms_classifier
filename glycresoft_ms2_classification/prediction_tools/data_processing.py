@@ -1,6 +1,7 @@
 import json
 from math import fabs
 import re
+from cStringIO import StringIO
 
 import pandas as pd
 import numpy as np
@@ -299,3 +300,89 @@ def filter_tandem_matches_by_ppm(row, ms2_tolerance):
         row[ion_type] = [
             ion for ion in row[ion_type] if fabs(ion['ppm_error']) <= ms2_tolerance]
     return row
+
+
+class PredictionResultsJSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, pd.DataFrame):
+            return json.loads(o.to_json(orient="records"))
+        else:
+            return json.JSONEncoder.default(self, o)
+
+
+class PredictionResults(object):
+    def __init__(self, metadata, predictions):
+        self.metadata = metadata
+        self.predictions = predictions
+
+    def __getitem__(self, inds):
+        return self.predictions[inds]
+
+    def __setitem__(self, inds, value):
+        self.predictions[inds] = value
+
+    def __getattr__(self, name):
+        try:
+            return object.__getattribute__(self, name)
+        except:
+            try:
+                return getattr(object.__getattribute__(self, "predictions"), name)
+            except:
+                raise AttributeError("Prediction Results has no attribute {attr}".format(attr=name))
+
+    @classmethod
+    def deserialize(cls, data_buffer):
+        loose_data = json.load(data_buffer, encoding="ascii")
+        metadata = loose_data["metadata"]
+        predictions = loose_data["predictions"]
+        predictions = cls.ensure_fields(predictions)
+        instance = cls(metadata, predictions)
+        return instance
+
+    @classmethod
+    def prepare(cls, metadata, predictions):
+        prediction_frame = PredictionResults(metadata, predictions)
+        prediction_frame.predictions = prediction_frame.ensure_fields(predictions)
+        return prediction_frame
+
+    def serialize(self, target_buffer=None):
+        if target_buffer is None:
+            target_buffer = StringIO()
+        if isinstance(target_buffer, basestring):
+            target_buffer = open(target_buffer, "wb")
+        encoder = PredictionResultsJSONEncoder(encoding="ascii")
+        for chunk in encoder.iterencode(self.__dict__):
+            target_buffer.write(chunk)
+        return target_buffer
+
+    @staticmethod
+    def ensure_fields(raw_predictions):
+        data = pd.DataFrame(raw_predictions)
+        data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
+        # Handle Decoys
+        data.ix[np.isnan(data.vol)].vol = -1
+        data.ix[np.isnan(data.startAA)].startAA = -1
+        data.ix[np.isnan(data.endAA)].endAA = -1
+        if "peptideLens" not in data:
+            data = get_sequence_length(data)
+        if "numOxIons" not in data:
+            data["numOxIons"] = map(len, data["Oxonium_ions"])
+        if "numStubs" not in data:
+            data["numStubs"] = map(len, data["Stub_ions"])
+        if "percent_b_ion_coverage" not in data:
+            shim_percent_calcs(data)
+        data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(glycosites)
+        ion_coverage_score(data)
+        modification_signature(data)
+        infer_glycan_mass(data)
+        return data
+
+
+def convert_csv_to_nested(path):
+    frame = prepare_model_file(path)
+    metadata = {
+        "ms1_results_file": path,
+        "_converted": True
+    }
+    pr = PredictionResults(metadata, frame)
+    return pr

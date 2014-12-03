@@ -2,13 +2,13 @@ from os.path import splitext
 import numpy as np
 from matplotlib import pyplot as plt
 
-from .statistics import prepare_model_file, save_model_file
-from .statistics import methods
-from .statistics import call_by_coverage
-from .statistics import determine_ambiguity
-from .statistics import model_definitions
-from .statistics import generate_confusion_matrix
-from .statistics import classify_with_model, generate_null_model
+from .prediction_tools import prepare_model_file, save_model_file
+from .prediction_tools import methods
+from .prediction_tools import call_by_coverage
+from .prediction_tools import determine_ambiguity
+from .prediction_tools import model_definitions
+from .prediction_tools import generate_confusion_matrix
+from .prediction_tools import classify_with_model, generate_null_model
 
 
 class ModelTask(object):

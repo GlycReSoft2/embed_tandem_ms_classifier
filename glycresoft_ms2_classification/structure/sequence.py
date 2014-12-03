@@ -22,7 +22,7 @@ def sequence_tokenizer(sequence):
     i = 0
     while i < len(sequence):
         next_char = sequence[i]
-        if next_char is "(":
+        if next_char == "(":
             if state == "aa":
                 state = "mod"
                 assert paren_level == 0

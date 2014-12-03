@@ -1,7 +1,6 @@
 '''Centralized Definition of Exception Definitions'''
 import os
 import json
-import sys
 import traceback
 import warnings
 
@@ -29,7 +28,7 @@ class ErrorCodingMeta(type):
         if cls.errcode < cls.ERRCODE_CAP:
             raise ErrorCodeErrorException(
                 "Out of POSIX compliant error codes!")
-        if "error_code_interface" not in __name__ :
+        if "error_code_interface" not in __name__:
             warnings.warn(
                 "Error codes should be defined in the error_code_interface.py file.\
                  This guarantees deterministic code assignment. " + __name__)

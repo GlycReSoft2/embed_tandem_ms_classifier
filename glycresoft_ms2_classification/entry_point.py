@@ -26,8 +26,8 @@ try:
     from protein_prospector.xml_parser import MSDigestParamters
 
     import theoretical_glycopeptide
-    import match_ions
-    import postprocess
+    import match_ions2
+    import postprocess2
     from classify_matches import PrepareModelTask
     from classify_matches import ClassifyTargetWithModelTask
     from classify_matches import ModelDiagnosticsTask
@@ -53,8 +53,11 @@ def load_parameters(param_file):
 
 def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications):
     try:
-        return theoretical_glycopeptide.main(ms1_results_file, sites_file,
-                                             constant_modifications, variable_modifications, None)
+        # res = theoretical_glycopeptide.main(ms1_results_file, sites_file,
+        #                                      constant_modifications, variable_modifications, None)
+        res = theoretical_glycopeptide.main_serial(ms1_results_file, sites_file, constant_modifications,
+                                                   variable_modifications, None)
+        return res
     except NoSitesFoundException, e:
         raise NoSitesFoundWrapperException(str(e))
     except UnqualifiedModifierException, e:
@@ -63,16 +66,18 @@ def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifi
 
 def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra, ms1_match_tolerance, ms2_match_tolerance):
     try:
-        return match_ions.match_frags(
+        path, data = match_ions2.match_frags(
             theoretical_ion_space, deconvoluted_spectra,
             ms1_match_tolerance, ms2_match_tolerance, split_decon_data=True,
             outfile=None)
+        return path
     except match_ions.NoIonsMatchedException, e:
         raise NoIonsMatchedException(str(e))
 
 
 def postprocess_matches(matched_ions_file):
-    return postprocess.main(matched_ions_file)
+    path, data = postprocess2.main(matched_ions_file)
+    return path
 
 
 def prepare_model_file(postprocessed_ions_file, method="full_random_forest", out=None):

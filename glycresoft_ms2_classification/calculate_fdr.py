@@ -15,7 +15,13 @@ from .structure.sequence import list_to_sequence
 from .structure.stub_glycopeptides import StubGlycopeptide
 from .structure import modification
 
+from .random_glycopeptide import RandomGlycopeptideBuilder
+from .random_glycopeptide import forge_prediction_record
 
+
+# Filter Predicate Logic
+# Used to construct compositions of multi-dimension filter functions.
+# Next time, use pandas.DataFrame.query
 def make_predicate(**kwargs):
     fn = functools.partial(predicate_base, **kwargs)
     setattr(fn, "sig", str(kwargs))
@@ -59,6 +65,7 @@ def build_shuffle_sequences(scored_matches, count=20, prefix_len=0, suffix_len=0
     '''
     iter_max = count * 100 if iter_max is None else iter_max
     shuffles = list()
+    RandomGlycopeptideBuilder(ppm_error=10e-6)
     for ind, row in scored_matches.iterrows():
         solutions = set()
         seq = Sequence(row.Glycopeptide_identifier).get_sequence()
@@ -83,6 +90,11 @@ def build_shuffle_sequences(scored_matches, count=20, prefix_len=0, suffix_len=0
             d.Glycopeptide_identifier = shuffle + row.Glycan
             d._batch_id = ind
             decoys.append(d)
+
+        short = count - len(solutions)
+        if(short > 0):
+            pass
+
         shuffles.append(decoys)
     return shuffles
 
