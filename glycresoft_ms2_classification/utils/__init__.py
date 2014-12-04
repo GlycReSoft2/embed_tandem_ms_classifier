@@ -7,9 +7,9 @@ __all__ = ["memoize", "try_deserialize", "try_get_outfile"]
 
 
 def try_deserialize(input_parameter):
-    if isinstance(input_parameter, (basestring)):
+    if isinstance(input_parameter, basestring):
         results = json.load(open(input_parameter))
-    if isinstance(input_parameter, file):
+    elif isinstance(input_parameter, file):
         results = json.load(input_parameter)
     else:
         results = input_parameter

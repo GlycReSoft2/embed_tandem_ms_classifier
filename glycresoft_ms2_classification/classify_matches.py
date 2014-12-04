@@ -9,6 +9,7 @@ from .prediction_tools import determine_ambiguity
 from .prediction_tools import model_definitions
 from .prediction_tools import generate_confusion_matrix
 from .prediction_tools import classify_with_model, generate_null_model
+from .prediction_tools import PredictionResults
 
 
 class ModelTask(object):

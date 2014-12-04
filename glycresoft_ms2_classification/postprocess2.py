@@ -14,7 +14,7 @@ def main(matched_ions_file, output_file=None):
         output_file = try_get_outfile(matched_ions_file, "processed")
     results = try_deserialize(matched_ions_file)
     scored_results = []
-
+    print((matched_ions_file))
     metadata = results["metadata"]
     matched_ions = results["matched_ions"]
 

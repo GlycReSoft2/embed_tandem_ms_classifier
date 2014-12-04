@@ -23,7 +23,7 @@ try:
     # Pipeline Steps as Modules
     from structure.sequence_space import UnqualifiedModifierException
     from structure.sequence_space import NoSitesFoundException
-    from protein_prospector.xml_parser import MSDigestParamters
+    from proteomics.xml_parser import MSDigestParamters
 
     import theoretical_glycopeptide
     import match_ions2
@@ -55,9 +55,9 @@ def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifi
     try:
         # res = theoretical_glycopeptide.main(ms1_results_file, sites_file,
         #                                      constant_modifications, variable_modifications, None)
-        res = theoretical_glycopeptide.main_serial(ms1_results_file, sites_file, constant_modifications,
-                                                   variable_modifications, None)
-        return res
+        path, fragments = theoretical_glycopeptide.main(ms1_results_file, sites_file, constant_modifications,
+                                                        variable_modifications, None)
+        return path
     except NoSitesFoundException, e:
         raise NoSitesFoundWrapperException(str(e))
     except UnqualifiedModifierException, e:
@@ -71,7 +71,7 @@ def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra, ms1_mat
             ms1_match_tolerance, ms2_match_tolerance, split_decon_data=True,
             outfile=None)
         return path
-    except match_ions.NoIonsMatchedException, e:
+    except match_ions2.NoIonsMatchedException, e:
         raise NoIonsMatchedException(str(e))
 
 
@@ -82,6 +82,7 @@ def postprocess_matches(matched_ions_file):
 
 def prepare_model_file(postprocessed_ions_file, method="full_random_forest", out=None):
     try:
+        print(postprocessed_ions_file)
         task = PrepareModelTask(
             model_file_path=postprocessed_ions_file, method="full_random_forest", output_path=out)
         result = task.run()

@@ -17,7 +17,7 @@ except:
     logging.basicConfig(level=logging.INFO)
 
 from glycresoft_ms2_classification.error_code_interface import NoIonsMatchedException
-
+from glycresoft_ms2_classification.utils import try_deserialize, try_get_outfile
 from glycresoft_ms2_classification.data_io.bupid_topdown_deconvoluter import BUPIDYamlParser
 from glycresoft_ms2_classification.data_io import default_loader, default_serializer, DeconIOBase
 
@@ -31,218 +31,6 @@ MACHINE_ACQUISITION_RANGE = 3200 * 24
 
 def save_interm(data, name):
     json.dump(data, open(name + ".json", 'wb'))
-
-
-def Mergedicts(dicts_to_merge):
-    # "firstrow" stores the data we will output. Items from other rows are incorporated
-    # into it if they have a ppm error closer to 0, or if they have a row not existing in the first row.
-    # in case the first dicts_to_merge is zero, we need a loop here. "allzero" is used
-    # to check if all "rows in dicts_to_merge" are empty.
-    # for dlist in dicts_to_merge:
-    #     logging.debug("[")
-    #     for d in dlist:
-    #         logging.debug("\t{")
-    #         for k, v in d.items():
-    #             logging.debug("\t\t%s -> %s" % (k, v))
-    #         logging.debug("\t}")
-    #     logging.debug("]")
-    allzero = True
-    if len(dicts_to_merge) <= 1:
-        if dicts_to_merge[0]:
-            firstrow = []
-            for items in dicts_to_merge[0]:
-                sameMatchFound = False
-                for items2 in firstrow:
-                    if str(items['key']) == str(items2['key']):
-                        sameMatchFound = True
-                        if math.fabs(float(items['ppm_error'])) < math.fabs(float(items2['ppm_error'])):
-                            items2 = items
-                        break
-                if sameMatchFound:
-                    sameMatchFound = False
-                else:
-                    firstrow.append(items)
-            return firstrow
-        else:
-            dicts_to_merge = []
-            return dicts_to_merge
-    for row in dicts_to_merge:
-        if len(row) != 0:
-            allzero = False
-            firstrow = row
-            break
-    if allzero:
-        dicts_to_merge = []
-    # if the dicts_to_merge is empty anyway, just return the same
-    # dicts_to_merge back.
-        return dicts_to_merge
-    else:
-        for row in dicts_to_merge:
-            if len(row) != 0:
-                temprow = row
-                firstrow = []
-                for items in temprow:
-                    sameMatchFound = False
-                    for items2 in firstrow:
-                        if str(items['key']) == str(items2['key']):
-                            sameMatchFound = True
-                            if math.fabs(float(items['ppm_error'])) < math.fabs(float(items2['ppm_error'])):
-                                items2 = items
-                            break
-                    if sameMatchFound:
-                        sameMatchFound = False
-                    else:
-                        firstrow.append(items)
-                break
-        # if the dicts_to_merge isn't empty, merge them.
-        # Each of the "row in dicts_to_merge" should be something like this: [{'ppm_error':
-        # -3.3899212497496274e-06, 'key': 'B3', 'obs_ion': 372.150116035},
-        # {'ppm_error': -1.2204514502310785e-05, 'key': 'B4', 'obs_ion':
-        # 532.175476035}, {'ppm_error': 1.812995934605501e-05, 'key': 'B4',
-        # 'obs_ion': 532.191589035}, {'ppm_error': 1.4021538362178224e-07, 'key':
-        # 'B5', 'obs_ion': 645.266113035}, {'ppm_error': 4.080114450361758e-06,
-        # 'key': 'B7', 'obs_ion': 922.376038035}, {'ppm_error':
-        # 1.0112467130843996e-05, 'key': 'B14', 'obs_ion': 1741.8025510349999}]
-        for row in dicts_to_merge:
-            # each of the "ReadingItems and firstrowReadingItems" should be
-            # something like this: {'ppm_error': -3.3899212497496274e-06, 'key':
-            # 'B3', 'obs_ion'}: 372.150116035}. If not, plz tell me.
-            if len(row) != 0:
-                for ReadingItems in row:
-                    same_key_exists = False
-                    for FR1 in range(len(firstrow)):
-                        if str(ReadingItems['key']) == str(firstrow[FR1]['key']):
-                            # if the same key exists, merge them.
-                            same_key_exists = True
-                            if math.fabs(float(ReadingItems['ppm_error'])) < math.fabs(float(firstrow[FR1]['ppm_error'])):
-                                firstrow[FR1] = ReadingItems
-                            break
-                    # if the row doesn't exist in our final answer, add it.
-                    if same_key_exists:
-                        same_key_exists = False
-                    else:
-                        firstrow.append(ReadingItems)
-
-    Finalfirstrow = []
-    for items in firstrow:
-        if items:
-            Finalfirstrow.append(items)
-    return Finalfirstrow
-
-# TODO:
-# Profile how scan_id spreads across merges
-# Look at how much information can be discerned across time between two ambiguous matches
-# Propagate this data along to downstream steps
-
-
-def MergeRows(SourceData):
-    # for row in range(len(SourceData)):
-    #	print(SourceData[row]['MS1_Score'], SourceData[row]['bare_b_ions'], "\n")
-    SourceData = sorted(SourceData, key=lambda k: k['Glycopeptide_identifier'])
-    # MergedList is used to store our final result, the merged list.
-    MergedList = []
-    Storage = SourceData[0]
-    newStorage = []
-    for row in range(len(SourceData)):
-        # newStorage is used to store the rows that have the same Glycopeptide identifier. Redeclaring it here to remove data from the last Glycopep ID.
-        # input the first row.
-        newStorage.append(Storage)
-        #print(SourceData[row]['MS1_Score'], SourceData[row]['bare_b_ions'], "\n")
-        if SourceData[row]['Glycopeptide_identifier'] == Storage['Glycopeptide_identifier']:
-            logging.info(SourceData[row], Storage)
-            Storage = SourceData[row]
-            newStorage.append(Storage)
-            # If this is the last row in SourceData, merge the rows now,
-            # instead of doing it in the "else" statement.
-            if (row + 1) == len(SourceData):
-                # Declaring variables to store N P R T V X Y Z columns.
-                oi = []
-                bbi = []
-                byi = []
-                biwh = []
-                yiwh = []
-                bic = []
-                yic = []
-                si = []
-                scan_id_range = set()
-                # newrow is used to store our combined row
-                newrow = []
-                # input initial variables into newrow.
-                newrow = newStorage[0]
-
-                for row2 in newStorage:
-                    oi.append(row2["Oxonium_ions"])
-                    bbi.append(row2["bare_b_ions"])
-                    byi.append(row2["bare_y_ions"])
-                    biwh.append(row2["b_ions_with_HexNAc"])
-                    yiwh.append(row2["y_ions_with_HexNAc"])
-                    bic.append(row2["b_ion_coverage"])
-                    yic.append(row2["y_ion_coverage"])
-                    si.append(row2["Stub_ions"])
-                    scan_id_range.add(row2["scan_id"])
-                # Change the N P R T V X Y Z columns' values in newrow.
-                #print(newrow['MS1_Score'], yic, "\n")
-                newrow["Oxonium_ions"] = Mergedicts(oi)
-                newrow["bare_b_ions"] = Mergedicts(bbi)
-                newrow["bare_y_ions"] = Mergedicts(byi)
-                newrow["b_ions_with_HexNAc"] = Mergedicts(biwh)
-                newrow["y_ions_with_HexNAc"] = Mergedicts(yiwh)
-                newrow["b_ion_coverage"] = Mergedicts(bic)
-                newrow["y_ion_coverage"] = Mergedicts(yic)
-                newrow["Stub_ions"] = Mergedicts(si)
-                newrow["scan_id_range"] = list(scan_id_range)
-                # Now put the newrow into the final output
-                #print (newrow['MS1_Score'], newrow["y_ion_coverage"], "\n\n")
-                MergedList.append(newrow)
-                newStorage = []
-                break
-
-        else:
-            # The new row has another glycopep identifier, so we are storing it
-            # in Storage for the next loop.
-            Storage = SourceData[row]
-            # Lets start merging the rows now.
-            # Declaring variables to store N P R T V X Y Z columns.
-            oi = []
-            bbi = []
-            byi = []
-            biwh = []
-            yiwh = []
-            bic = []
-            yic = []
-            si = []
-            scan_id_range = set()
-            # newrow is used to store our combined row
-            newrow = []
-            # input initial variables into newrow.
-            newrow = newStorage[0]
-            for row2 in newStorage:
-                oi.append(row2["Oxonium_ions"])
-                bbi.append(row2["bare_b_ions"])
-                byi.append(row2["bare_y_ions"])
-                biwh.append(row2["b_ions_with_HexNAc"])
-                yiwh.append(row2["y_ions_with_HexNAc"])
-                bic.append(row2["b_ion_coverage"])
-                yic.append(row2["y_ion_coverage"])
-                si.append(row2["Stub_ions"])
-                scan_id_range.add(row2["scan_id"])
-            # Change the N P R T V X Y Z columns' values in newrow.
-            #print(newrow['MS1_Score'], yic, "\n")
-            newrow["Oxonium_ions"] = Mergedicts(oi)
-            newrow["bare_b_ions"] = Mergedicts(bbi)
-            newrow["bare_y_ions"] = Mergedicts(byi)
-            newrow["b_ions_with_HexNAc"] = Mergedicts(biwh)
-            newrow["y_ions_with_HexNAc"] = Mergedicts(yiwh)
-            newrow["b_ion_coverage"] = Mergedicts(bic)
-            newrow["y_ion_coverage"] = Mergedicts(yic)
-            newrow["Stub_ions"] = Mergedicts(si)
-            newrow["scan_id_range"] = list(scan_id_range)
-            #print (newrow['MS1_Score'], newrow["y_ion_coverage"], "\n\n")
-            # Now put the newrow into the final output
-            newStorage = []
-            MergedList.append(newrow)
-            continue
-    return MergedList
 
 
 def split_decon_data_by_index(decon_data, splitting_index):
@@ -301,7 +89,8 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                         ((ob_ions.mass + Proton) - ox_ion) / (ob_ions.mass + Proton))
                     if fabs(oxonium_ppm) <= ms2_tolerance:
                         oxoniums.append(
-                            {"ion": (ob_ions.mass + Proton), "ppm_error": oxonium_ppm * 1e6, "key": ox_ion})
+                            {"ion": (ob_ions.mass + Proton), "ppm_error": oxonium_ppm * 1e6,
+                             "key": ox_ion, "scan_id": tandem_ms_ind})
 
             # checking for b and y ions and ions with HexNAc:
             b_ions = theoretical['bare_b_ions']
@@ -317,10 +106,10 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         b_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
                         all_b_ions.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
 
             b_HexNAc_ions = theoretical['b_ions_with_HexNAc']
             b_HexNAc_type = []
@@ -333,11 +122,11 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         b_HexNAc_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
                         all_b_ions.append(
                             {"obs_ion": (obs_ions.mass + Proton),
                              "key": theo_ions["key"].split("+")[0],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
 
             y_ions = list(theoretical['bare_y_ions'])
             y_len = float(len(y_ions))
@@ -352,10 +141,10 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         y_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
                         all_y_ions.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
 
             y_HexNAc_ions = theoretical['y_ions_with_HexNAc']
             y_HexNAc_type = []
@@ -368,11 +157,11 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         y_HexNAc_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
                         all_y_ions.append(
                             {"obs_ion": (obs_ions.mass + Proton),
                              "key": theo_ions["key"].split("+")[0],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
 
             # checking for stub ions
             stub_ions = theoretical['pep_stub_ions']
@@ -386,7 +175,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         stub_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                             "ppm_error": tandem_ppm * 1e6})
+                             "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
             results.append({
                 "MS1_Score": theoretical["MS1_Score"], "Obs_Mass": theoretical["Obs_Mass"],
                 "Calc_mass": theoretical["Calc_mass"],
@@ -472,27 +261,19 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
     :param tag: name to associated with match
     :param outfile: path to the file to write output to. Defaults to theo_fragment_file + ".match_frags".
     '''
-    if outfile is None:
-        outfile = splitext(splitext(theo_fragment_file)[0])[0] + '.match_frags'
 
     pool = multiprocessing.Pool(n_processes)
 
     data = decon_format_lookup[decon_data_format](decon_data)
     print("Loading observed ions complete")
 
-    if isinstance(theo_fragment_file, (str, file)):
-        theoretical_search_space = json.load(open(theo_fragment_file))
-        if outfile is None:
-            outfile = splitext(splitext(theo_fragment_file)[0])[0] + '.match_frags'
-    else:
-        theoretical_search_space = theo_fragment_file
+    theoretical_search_space = try_deserialize(theo_fragment_file)
+    if outfile is None:
+        outfile = try_get_outfile(theoretical_search_space, "match_frags")
 
     metadata = theoretical_search_space["metadata"]
     metadata["ms1_ppm_tolerance"] = ms1_tolerance
     metadata["ms2_ppm_tolerance"] = ms2_tolerance
-
-    if outfile is None:
-        outfile = splitext(metadata["ms1_output_file"])[0] + '.match_frags'
 
     if "tag" not in metadata:
         metadata["tag"] = tag

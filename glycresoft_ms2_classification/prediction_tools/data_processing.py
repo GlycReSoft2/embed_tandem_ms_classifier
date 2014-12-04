@@ -95,6 +95,8 @@ def shim_percent_calcs(data):
 # CSV into a pandas.DataFrame and make sure it has all of the necessary columns and
 # transformations to either build a model with it or
 def prepare_model_file(path):
+    if path[-4:] == "json":
+        return PredictionResults.deserialize(path)
     data = pd.read_csv(path)
     deserialize_compound_fields(data)
     data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
@@ -121,6 +123,9 @@ def prepare_model_file(path):
 # Serialize the model object into a CSV file. Creates a copy of the data which has its
 # complex fields JSON encoded.
 def save_model_file(data_struct, path):
+    if isinstance(data_struct, PredictionResults):
+        data_struct.serialize(path)
+        return
     write_copy = data_struct.copy()
     serialize_compound_fields(write_copy)
     write_copy.to_csv(path, index=False, encoding="utf-8")
@@ -226,10 +231,11 @@ def determine_ambiguity(data_struct):
     data_struct['ambiguity'] = False
     groupings = data_struct.groupby(["MS1_Score", "Obs_Mass"])
     # Bit list for pandas.DataFrame sort function
+    data_struct["_abs_ppm_error"] = data_struct["ppm_error"].abs()
     sort_direction = [1, 1, 1, 0, 1, 0, 1]
     sort_fields = ["MS2_Score", "numStubs", "meanCoverage",
                    "percentUncovered", "peptideLens",
-                   "abs_ppm_error", "meanHexNAcCoverage"]
+                   "_abs_ppm_error", "meanHexNAcCoverage"]
     if "MS2_Score" not in data_struct:
         sort_direction.pop(0)
         sort_fields.pop(0)
@@ -244,6 +250,7 @@ def determine_ambiguity(data_struct):
         regrouping.append(group)
 
     regroup = pd.concat(regrouping)
+    regroup.drop("_abs_ppm_error", axis=1, inplace=True)
     return regroup
 
 
@@ -330,9 +337,14 @@ class PredictionResults(object):
             except:
                 raise AttributeError("Prediction Results has no attribute {attr}".format(attr=name))
 
+    def __contains__(self, name):
+        return name in self.predictions
+
     @classmethod
     def deserialize(cls, data_buffer):
-        loose_data = json.load(data_buffer, encoding="ascii")
+        if isinstance(data_buffer, basestring):
+            data_buffer = open(data_buffer, "rb")
+        loose_data = json.load(data_buffer)
         metadata = loose_data["metadata"]
         predictions = loose_data["predictions"]
         predictions = cls.ensure_fields(predictions)
@@ -363,6 +375,8 @@ class PredictionResults(object):
         data.ix[np.isnan(data.vol)].vol = -1
         data.ix[np.isnan(data.startAA)].startAA = -1
         data.ix[np.isnan(data.endAA)].endAA = -1
+        if "bad_oxonium_ions" not in data:
+            data["bad_oxonium_ions"] = data.Oxonium_ions.apply(lambda x: [])
         if "peptideLens" not in data:
             data = get_sequence_length(data)
         if "numOxIons" not in data:

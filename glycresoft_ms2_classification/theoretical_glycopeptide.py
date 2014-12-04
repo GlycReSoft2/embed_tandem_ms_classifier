@@ -309,13 +309,15 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
 
     fragment_info = list(itertools.chain.from_iterable(pool.map(task_fn, compo_dict, chunksize=200)))
 
-    fh = open(output_file + '.json', 'wb')
-    data = {
-        "metadata": metadata,
-        "theoretical_search_space": fragment_info
-    }
-    json.dump(data, fh)
-    fh.close()
+    if output_file is not False:
+        print("Writing to file")
+        fh = open(output_file + '.json', 'wb')
+        data = {
+            "metadata": metadata,
+            "theoretical_search_space": fragment_info
+        }
+        json.dump(data, fh)
+        fh.close()
 
     return output_file + '.json', data
 
