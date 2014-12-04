@@ -23,7 +23,7 @@ try:
     # Pipeline Steps as Modules
     from structure.sequence_space import UnqualifiedModifierException
     from structure.sequence_space import NoSitesFoundException
-    from proteomics.xml_parser import MSDigestParamters
+    from proteomics.msdigest_xml_parser import MSDigestParamters
 
     import theoretical_glycopeptide
     import match_ions2
