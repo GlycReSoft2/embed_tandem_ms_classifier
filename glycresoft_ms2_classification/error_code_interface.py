@@ -35,9 +35,11 @@ class ErrorCodingMeta(type):
         return type.__new__(cls, name, parents, attrs)
 
     @classmethod
-    def build_error_code_map(cls, path=os.path.join(os.path.dirname(__file__), "exit_code_map.json")):
-        json.dump(cls.errmap, open(path, 'wb'), indent=4)
-        return path
+    def build_error_code_map(cls, output_file=None):
+        if output_file is None:
+            output_file = os.path.join(os.path.dirname(__file__), "exit_code_map.json")
+        json.dump(cls.errmap, open(output_file, 'wb'), indent=4)
+        return output_file
 
 
 class GlycReSoftInterprocessCommunicationException(Exception):

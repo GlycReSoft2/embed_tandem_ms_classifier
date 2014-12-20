@@ -67,11 +67,14 @@ class Residue(ResidueBase):
         return composition_to_mass(formula)
 
     """Basic mass values for peptide sequences"""
-    def __init__(self, aa=''):
+    def __init__(self, aa='', symbol=None):
         self.symbol = None
         self.name = None
         self.mass = 0.0
-        self.by_name(aa)
+        if symbol is not None:
+            self.by_symbol(symbol)
+        else:
+            self.by_name(aa)
 
     def by_name(self, name):
         self.compo = residue_table.get(name)

@@ -18,6 +18,7 @@ def sequence_tokenizer(sequence):
     glycan = ""
     current_aa = ""
     current_mod = ""
+    current_mods = []
     paren_level = 0
     i = 0
     while i < len(sequence):
@@ -38,19 +39,29 @@ def sequence_tokenizer(sequence):
                 paren_level -= 1
                 if paren_level == 0:
                     state = 'aa'
-                    mods.append(current_mod)
-                    chunks.append([current_aa, current_mod])
+                    mods.extend(current_mods)
+                    current_mods.append(current_mod)
+                    chunks.append([current_aa, current_mods])
+                    current_mods = []
                     current_mod = ""
                     current_aa = ""
                 else:
                     current_mod += next_char
+        elif next_char == "|":
+            if state == "aa":
+                raise Exception("Invalid Sequence. | found outside of modification")
+            else:
+                current_mods.append(current_mod)
+                current_mod = ""
         elif next_char == "[" and state == 'aa':
             glycan = sequence[i:]
             break
         elif state == "aa":
             if(current_aa != ""):
-                chunks.append([current_aa, current_mod])
+                current_mods.append(current_mod)
+                chunks.append([current_aa, current_mods])
                 current_mod = ""
+                current_mods = []
                 current_aa = ""
             current_aa += next_char
         elif state == "mod":

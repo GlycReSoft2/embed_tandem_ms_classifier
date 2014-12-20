@@ -1,22 +1,24 @@
-import csv
 import itertools
+import json
 import random
 import re
 import functools
 
+from copy import deepcopy
+
 import classify_matches
-import match_ions
-import postprocess
+import match_ions2
+import postprocess2
 
-from .structure.sequence import Sequence
-from .structure.sequence import strip_modifications
-from .structure.sequence import sequence_tokenizer_respect_sequons
-from .structure.sequence import list_to_sequence
-from .structure.stub_glycopeptides import StubGlycopeptide
-from .structure import modification
+from structure.glycans import glycan_from_predictions
+from structure.sequence import Sequence
+from structure.sequence import strip_modifications
+from structure.sequence import sequence_tokenizer_respect_sequons
+from structure.sequence import list_to_sequence
+from structure.stub_glycopeptides import StubGlycopeptide
+from structure import modification
 
-from .random_glycopeptide import RandomGlycopeptideBuilder
-from .random_glycopeptide import forge_prediction_record
+from random_glycopeptide import RandomGlycopeptideBuilder, forge_prediction_record
 
 
 # Filter Predicate Logic
@@ -24,25 +26,25 @@ from .random_glycopeptide import forge_prediction_record
 # Next time, use pandas.DataFrame.query
 def make_predicate(**kwargs):
     fn = functools.partial(predicate_base, **kwargs)
-    setattr(fn, "sig", str(kwargs))
+    setattr(fn, "sig", kwargs)
     return fn
 
 
 def and_predicate(predicate, other):
     fn = lambda x: predicate(x) and other(x)
-    setattr(fn, "sig", "({0}) and ({1})".format(predicate.sig, other.sig))
+    setattr(fn, "sig", {"op": "and", "a": predicate.sig, "b": other.sig})
     return fn
 
 
 def or_predicate(predicate, other):
     fn = lambda x: predicate(x) or other(x)
-    setattr(fn, "sig", "({0}) and ({1})".format(predicate.sig, other.sig))
+    setattr(fn, "sig", {"op": "or", "a": predicate.sig, "b": other.sig})
     return fn
 
 
 def negate_predicate(predicate):
     fn = lambda x: not predicate(x)
-    setattr(fn, "sig", "not ({0})".format(predicate.sig))
+    setattr(fn, "sig", {"op": "not", "a": predicate.sig})
     return fn
 
 
@@ -53,9 +55,37 @@ def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percent
            (x.numStubs >= numStubs) & (x.meanHexNAcCoverage >= meanHexNAcCoverage)
 
 
+def query_threshold(MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0,
+                    peptideLens=0, Obs_Mass=0, numStubs=-1):
+    query_string = "MS2_Score >= {MS2_Score} and  meanCoverage >= {meanCoverage} and\
+ meanHexNAcCoverage >= {meanHexNAcCoverage} and \
+ percentUncovered <= {percentUncovered} and  peptideLens >= {peptideLens}\
+ and  Obs_Mass >= {Obs_Mass}\
+ and  numStubs >= {numStubs}".format(**locals())
+    return query_string
+
+
+def shuffle_sequence(solutions, sequence, prefix_len, suffix_len, count, iter_max):
+    solutions = set()
+    solutions.add(solutions)
+    iter_count = 0
+    clone = sequence_tokenizer_respect_sequons(sequence)
+    pref = clone[:prefix_len]
+    suf = clone[-suffix_len:]
+    body = clone[prefix_len:len(clone) - suffix_len]
+    while(len(solutions) - 1 < count and iter_count < iter_max):
+        for shuffle in itertools.permutations(body):
+            clone = pref + list(shuffle) + suf
+            solutions.add(str(list_to_sequence(clone)))
+            if(len(solutions) - 1) >= count:
+                break
+        iter_count += 1
+    solutions.discard(sequence)
+
+
 def build_shuffle_sequences(scored_matches, count=20, prefix_len=0, suffix_len=0, iter_max=None):
     '''
-        :type scored_matches: pd.DataFrame
+        :type scored_matches: PredictionResults
         :param scored_matches: pd.DataFrame having scored MS2 matches
         :param count: int > 0, number of random peptides to generate per match
         :param prefix_len: int >= 0, number of AA to preserve order on of the
@@ -63,9 +93,22 @@ def build_shuffle_sequences(scored_matches, count=20, prefix_len=0, suffix_len=0
         :param suffix_len: int >= 0, number of AA to preserve order on of the
                            end of the match sequence
     '''
-    iter_max = count * 100 if iter_max is None else iter_max
+    iter_max = count * 10 if iter_max is None else iter_max
     shuffles = list()
-    RandomGlycopeptideBuilder(ppm_error=10e-6)
+    enzyme = scored_matches.metadata.get("enzyme")
+    starts = sum([enz["cleavage_start"] for enz in enzyme], [])
+    ends = sum([enz["cleavage_end"] for enz in enzyme], [])
+
+    modification_table = modification.ModificationTable.bootstrap()
+    builder = RandomGlycopeptideBuilder(
+        ppm_error=scored_matches.metadata.get("ms1_ppm_tolerance", 10e-6),
+        constant_modifications=map(modification_table.__getitem__,
+                                   scored_matches.metadata.get("constant_modifications", [])),
+        variable_modifications=map(modification_table.__getitem__,
+                                   scored_matches.metadata.get("variable_modifciations", [])),
+        glycans=glycan_from_predictions(scored_matches),
+        cleavage_start=starts,
+        cleavage_end=ends)
     for ind, row in scored_matches.iterrows():
         solutions = set()
         seq = Sequence(row.Glycopeptide_identifier).get_sequence()
@@ -76,10 +119,11 @@ def build_shuffle_sequences(scored_matches, count=20, prefix_len=0, suffix_len=0
         suf = clone[-suffix_len:]
         body = clone[prefix_len:len(clone) - suffix_len]
         while(len(solutions) - 1 < count and iter_count < iter_max):
+            random.shuffle(body)
             for shuffle in itertools.permutations(body):
                 clone = pref + list(shuffle) + suf
-                if random.random() < (1.0/(len(solutions) + 1.0)):
-                    solutions.add(list_to_sequence(clone))
+                res = str(list_to_sequence(clone))
+                solutions.add(res)
                 if(len(solutions) - 1) >= count:
                     break
             iter_count += 1
@@ -90,17 +134,27 @@ def build_shuffle_sequences(scored_matches, count=20, prefix_len=0, suffix_len=0
             d.Glycopeptide_identifier = shuffle + row.Glycan
             d._batch_id = ind
             decoys.append(d)
+            builder.ignore_sequences.add(shuffle)
 
         short = count - len(solutions)
         if(short > 0):
-            pass
+            print(short, str(seq))
+            randomized = builder.generate_random(row.Calc_mass, short)
+            assert len(randomized) == short
+            for rand in randomized:
+                forgery = forge_prediction_record(rand, row)
+                decoys.append(forgery)
 
         shuffles.append(decoys)
     return shuffles
 
 
 def random_glycopeptide_to_fragments(sequence_record):
-    seq_obj = Sequence(sequence_record.Glycopeptide_identifier)
+    try:
+        seq_obj = Sequence(sequence_record.Glycopeptide_identifier)
+    except:
+        print(sequence_record)
+        raise
     glycan_map = {}
     modifications = []
     for i, (aa, mods) in enumerate(seq_obj):
@@ -182,7 +236,7 @@ def random_glycopeptide_to_fragments(sequence_record):
         "pep_stub_ions": stub_ions,
         "Oxonium_ions": oxonium_ions,
         "Glycopeptide_identifier": seq_obj.get_sequence() + glycan_composition_restring,
-        "_batch_id": sequence_record._batch_id
+        "_batch_id": int(sequence_record._batch_id)
     }
     return ions
 
@@ -209,9 +263,6 @@ def calculate_fdr(scored_matches_frame, decoy_matches_frame, predicate_fn=lambda
         "num_decoy_matches": n_decoy_passed,
         "decoy_to_real_ratio": num_decoys_per_real_mass,
         "false_discovery_rate": fdr,
-        "predicted_database": None,
-        "decoy_database": None,
-        "searched_spectra": None,
         "threshold": (getattr(predicate_fn, "sig", None))
     }
     return results_obj
@@ -224,27 +275,22 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
                                  method_init_args=None, method_fit_args=None):
     scored_matches_frame = classify_matches.prepare_model_file(
         scored_matches_path)
-    decoy_file_name = scored_matches_path[:-4] + ".decoy.ion_space.csv"
+    decoy_file_name = scored_matches_path[:-4] + "decoy.ion_space.json"
 
     random_sequences = build_shuffle_sequences(scored_matches_frame, int(num_decoys_per_real_mass),
                                                prefix_len=prefix_len, suffix_len=suffix_len)
     fh = open(decoy_file_name, "wb")
-
-    fragments = (random_glycopeptide_to_fragments(decoy) for decoy in itertools.chain.from_iterable(random_sequences))
-
-    # Fetch the first fragment set for headers
-    frag_sample = fragments.next()
-    writer = csv.DictWriter(fh, frag_sample.keys())
-    # Write out fragments
-    writer.writeheader()
-    writer.writerow(frag_sample)
-    writer.writerows(fragments)
+    metadata = deepcopy(scored_matches_frame.metadata)
+    metadata["tag"] += "decoy"
+    fragments = [random_glycopeptide_to_fragments(decoy) for decoy in itertools.chain.from_iterable(random_sequences)]
+    decoy_fragments = {"metadata": metadata, "theoretical_search_space": fragments}
+    json.dump(decoy_fragments, fh)
     fh.close()
     print(decoy_file_name)
-    match_file = match_ions.match_frags(
-        decoy_file_name, decon_data, ms1_tolerance, ms2_tolerance)
+    match_file, match_data = match_ions2.match_frags(
+        decoy_fragments, decon_data, ms1_tolerance, ms2_tolerance)
     print(match_file)
-    postprocess_file = postprocess.main(match_file)
+    postprocess_file, postprocess_data = postprocess2.main(match_data)
     print(postprocess_file)
     classifier = classify_matches.ClassifyTargetWithModelTask(model_file_path, postprocess_file,
                                                               method=method,
@@ -268,12 +314,12 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
         "real" and "decoy" databases. Use `make_predicate` with keyword arguments matching column
         names and numeric thresholds for ease of use and documentation.
 
-        :param outfile_path str: defaults to scored_matches_path[:-4] + "_fdr.csv" will contain the
+        :param outfile_path str: defaults to scored_matches_path[:-4] + "_fdr.json" will contain the
         resulting FDR statistic for each cutoff.
     '''
 
     if outfile_path is None:
-        outfile_path = scored_matches_path[:-4] + "_fdr.csv"
+        outfile_path = scored_matches_path[:-5] + "_fdr.json"
     if decon_data is not None and model_file_path is not None:
         decoy_matches_path = generate_decoy_match_results(
             scored_matches_path, decon_data, model_file_path, prefix_len=prefix_len,
@@ -297,9 +343,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
                     predicate, num_decoys_per_real_mass)
                 if results_obj is None:
                     continue
-                results_obj['predicted_database'] = scored_matches_path
-                results_obj['decoy_database'] = decoy_matches_path
-                results_obj['modificationSignature'] = mod_signature
+                results_obj['modification_signature'] = mod_signature
                 results.append(results_obj)
         # Overall
         results_obj = calculate_fdr(
@@ -307,16 +351,15 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
             predicate, num_decoys_per_real_mass)
         if results_obj is None:
             continue
-        results_obj['predicted_database'] = scored_matches_path
-        results_obj['decoy_database'] = decoy_matches_path
-        results_obj['modificationSignature'] = "*"
+        results_obj['modification_signature'] = "*"
         results.append(results_obj)
 
-    results_fh = open(outfile_path, 'wb')
-    results_writer = csv.DictWriter(results_fh, results[0].keys())
-    results_writer.writeheader()
-    results_writer.writerows(results)
-    results_fh.close()
+    scored_matches_frame.metadata["fdr"] = results
+    scored_matches_frame.serialize(outfile_path)
+    # results_fh = open(outfile_path, 'wb')
+    # json.dump(results, results_fh)
+    # results_fh.close()
+
     return results
 
 
@@ -341,10 +384,9 @@ def default_predicates():
 if __name__ == '__main__':
     import argparse
     app = argparse.ArgumentParser()
-    app.add_argument(
-        "--decon_data", default=None, help="MS2 deconvolution output file path")
-    app.add_argument("--model_file", default=None,
-                     help="The model to train a classifier on for scoring decoys")
+    app.add_argument("--decon_data", default=None, help="MS2 deconvolution output file path")
+    app.add_argument("--model_file", default=None, help="The model to train a classifier on for\
+     scoring decoys")
     app.add_argument("-d", "--decoy_matches", default=None, required=False, help="Path to decoy matches\
                      that have already been generated")
     app.add_argument("-s", "--scored_matches", required=True,

@@ -20,7 +20,7 @@ class Fragment:
         """
         fragment_name = []
         fragment_name.append(self.type)
-        fragment_name.append(str(self.pos+1))
+        fragment_name.append(str(self.pos))
         return ''.join(fragment_name)
 
     def get_mass(self):
@@ -42,7 +42,7 @@ class Fragment:
         """
         fragment_name = []
         fragment_name.append(self.type)
-        fragment_name.append(str(self.pos+1))
+        fragment_name.append(str(self.pos))
 
         ## Only concerned modification is reported.
         concerned_mod = ['HexNAc']

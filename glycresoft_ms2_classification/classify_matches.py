@@ -10,6 +10,7 @@ from .prediction_tools import model_definitions
 from .prediction_tools import generate_confusion_matrix
 from .prediction_tools import classify_with_model, generate_null_model
 from .prediction_tools import PredictionResults
+from utils import try_deserialize, try_get_outfile
 
 
 class ModelTask(object):
@@ -40,8 +41,7 @@ class PrepareModelTask(ModelTask):
         if method_fit_args is None:
             method_fit_args = dict()
         if output_path is None:
-            output_path = splitext(
-                splitext(model_file_path)[0])[0] + ".model.csv"
+            output_path = try_get_outfile(model_file_path, "model")
         self.output_path = output_path
         super(PrepareModelTask, self).__init__(method)
         self.model_path = model_file_path
@@ -55,7 +55,9 @@ class PrepareModelTask(ModelTask):
         self.model_frame['noise_filter'] = 0.0
 
     def save_model(self):
-        save_model_file(self.model_frame, self.output_path)
+        out = save_model_file(self.model_frame, self.output_path)
+        print(out)
+        self.output_path = out
 
     def run(self):
         self.build_model()
@@ -73,8 +75,7 @@ class ClassifyTargetWithModelTask(ModelTask):
         if method_fit_args is None:
             method_fit_args = dict()
         if output_path is None:
-            output_path = splitext(
-                splitext(target_file_path)[0])[0] + ".scored.csv"
+            output_path = try_get_outfile(target_file_path, "scored")
         self.output_path = output_path
         super(ClassifyTargetWithModelTask, self).__init__(
             method, method_init_args, method_fit_args)
@@ -104,7 +105,8 @@ class ClassifyTargetWithModelTask(ModelTask):
         self.target_frame['call'] = scores > 0.5
 
     def save_target(self):
-        save_model_file(self.target_frame, self.output_path)
+        out = save_model_file(self.target_frame, self.output_path)
+        self.output_path = out
 
     def run(self):
         self.build_model()
@@ -124,8 +126,7 @@ class ModelDiagnosticsTask(ModelTask):
         if method_fit_args is None:
             method_fit_args = dict()
         if output_path is None:
-            output_path = splitext(
-                splitext(model_file_path)[0])[0] + ".feature_importance_%s.png" % method
+            output_path = try_get_outfile(model_file_path, "feature_importance_%s.png" % method)
         self.output_path = output_path
         super(ModelDiagnosticsTask, self).__init__(method)
         self.model_path = model_file_path

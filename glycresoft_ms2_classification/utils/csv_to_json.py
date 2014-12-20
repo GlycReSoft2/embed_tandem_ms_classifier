@@ -3,8 +3,18 @@ import csv
 from glycresoft_ms2_classification.prediction_tools import convert_csv_to_nested
 from glycresoft_ms2_classification.utils import try_get_outfile
 
+import argparse
+app = argparse.ArgumentParser()
+app.add_argument("csv_file")
+app.add_argument("-m", "--metadata", default=None)
+app.add_argument("-s", "--site-file", type=str, default=None, help="A file listing each position along\
+ the peptide where glycosylation is predicted")
+args = app.parse_args()
 
-def main(data_path, metadata_source=None, sites_file=None):
+
+def main():
+    args = app.parse_args()
+    data_path, metadata_source, sites_file = args.csv_file, args.metadata, args.site_file
     prediction_results = convert_csv_to_nested(data_path)
     if metadata_source is not None:
         reader = csv.DictReader(open(metadata_source))
@@ -16,7 +26,7 @@ def main(data_path, metadata_source=None, sites_file=None):
         prediction_results.metadata["site_list"] = site_list
     outfile = try_get_outfile(data_path, "json")
     prediction_results.serialize(outfile)
-    print(prediction_results.metadata)
+    print(outfile)
     return outfile
 
 
@@ -35,12 +45,4 @@ def get_glycan_identities(colnames):
     return glycan_identity
 
 if __name__ == '__main__':
-    import argparse
-    app = argparse.ArgumentParser()
-    app.add_argument("csv_file")
-    app.add_argument("-m", "--metadata", default=None)
-    app.add_argument("-s", "--site-file", type=str, help="A file listing each position along\
-     the peptide where glycosylation is predicted")
-    args = app.parse_args()
-    res = main(args.csv_file, args.metadata)
-    print(res)
+    main()

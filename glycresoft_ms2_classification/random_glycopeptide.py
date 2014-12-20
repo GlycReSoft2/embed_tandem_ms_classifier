@@ -24,16 +24,11 @@ from .structure import residue
 from .structure import glycans as glycan_lib
 
 from .utils.mass_heap import MassHeap
-from .classify_matches import prepare_model_file
 
 mammalian_glycans = glycan_lib.load_from_file()
 
 residue_symbols = residue.symbol_to_residue
 smallest_mass = sequence_to_mass("G")
-
-
-def load_glycans_from_predictions(classify_matches_path):
-    return glycan_lib.glycan_from_predictions(prepare_model_file(classify_matches_path))
 
 
 def generate_n_linked_sequons():
@@ -189,13 +184,17 @@ def forge_prediction_record(sequence, reference):
     modifications = []
     for i, (aa, mods) in enumerate(seq_obj):
         for mod in mods:
-            if mod.name in {"Glycan", "HexNAc"}:
+            if "Glycan" in mod.name:
                 glycan_map[i] = mod.name
             else:
                 # Construct the set of acceptable reasons why this modification is here.
                 # Infer the least permissive modification rule.
-                why = mod.why_valid(aa, i)
-                modifications.append(modification.Modification(why, (i,)))
+                try:
+                    why = mod.why_valid(aa, i)
+                    modifications.append(modification.Modification(why, (i,)))
+                except AttributeError:
+                    print(mod)
+                    raise
 
     # Remove glycans from the sequence string to conform to the SequenceSpace
     # expectations
@@ -316,7 +315,7 @@ def random_glycopeptide_to_sequence_space(sequence, proxy, glycan_string=None):
 class RandomGlycopeptideBuilder(object):
 
     def __init__(self, ppm_error, constant_modifications=None, variable_modifications=None,
-                 glycans=None, cleavage_start=None, cleavage_end=None,):
+                 glycans=None, cleavage_start=None, cleavage_end=None, ignore_sequences=None):
         if glycans is None:
             glycans = mammalian_glycans
         self.glycans = glycans
@@ -337,19 +336,24 @@ class RandomGlycopeptideBuilder(object):
 
         if cleavage_end is None or len(cleavage_end) == 0:
             cleavage_end = [""]
+        if ignore_sequences is None:
+            ignore_sequences = []
+        self.ignore_sequences = set(ignore_sequences)
         self.cleavage_end = cleavage_end
 
-        cleavage_pattern = Protease(cleavage_start, cleavage_end)
+        self.ppm_error = ppm_error
+
+        self.cleavage_pattern = Protease(cleavage_start, cleavage_end)
 
         self.variable_modifications = [
             mod for mod in variable_modifications if mod.name != "HexNAc"]
         self.constant_modifications = [
             mod for mod in constant_modifications if mod.name != "HexNAc"]
 
-        self.components = MassHeap(map(lambda x: GrowingSequence(x, cleavage_pattern), generate_component_set(
+        self.components = MassHeap(map(lambda x: GrowingSequence(x, self.cleavage_pattern), generate_component_set(
             constant_modifications, variable_modifications)))
         self.sequons = MassHeap(
-            map(lambda x: GrowingSequence(x, cleavage_pattern),
+            map(lambda x: GrowingSequence(x, self.cleavage_pattern),
                 itertools.chain.from_iterable(
                     map(lambda x: ("{0}({1}){2}".format(x[0], g.as_modification().serialize(), x[1:])
                                    for g in glycans),
@@ -409,6 +413,8 @@ class RandomGlycopeptideBuilder(object):
                              (padded_sequence, padded_sequence.mass, error))
                 # Accept?
                 if error <= ppm_error:
+                    if str(padded_sequence) in self.ignore_sequences:
+                        continue
                     logging.info("Accepting %s %s" %
                                  (padded_sequence, padded_sequence.mass))
                     solutions.add(str(padded_sequence))

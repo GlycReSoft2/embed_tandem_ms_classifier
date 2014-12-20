@@ -17,7 +17,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            "glycresoft-ms2 = glycresoft_ms2_classification.entry_point:main"
+            "glycresoft-ms2 = glycresoft_ms2_classification.entry_point:main",
         ],
         'setuptools.installation': [
             "eggsecutable = glycresoft_ms2_classification.entry_point:main"

@@ -1,25 +1,21 @@
-#!usr/bin/python
-
 import json
 import math
 from os.path import splitext
-from collections import Counter
+from collections import Counter, defaultdict
 
 import multiprocessing
 import functools
 import itertools
 
 import logging
-try:
-    logging.basicConfig(stream=open("match-log.txt", 'w'), level=logging.INFO)
-    pass
-except:
-    logging.basicConfig(level=logging.INFO)
+multiprocessing.log_to_stderr()
 
 from glycresoft_ms2_classification.error_code_interface import NoIonsMatchedException
-from glycresoft_ms2_classification.utils import try_deserialize, try_get_outfile
+from glycresoft_ms2_classification.utils import try_deserialize, try_get_outfile, collectiontools
 from glycresoft_ms2_classification.data_io.bupid_topdown_deconvoluter import BUPIDYamlParser
-from glycresoft_ms2_classification.data_io import default_loader, default_serializer, DeconIOBase
+from glycresoft_ms2_classification.data_io import default_loader, default_serializer
+from glycresoft_ms2_classification.data_io import DeconIOBase
+from glycresoft_ms2_classification.data_io import ParallelParser
 
 Proton = 1.007276035
 
@@ -199,9 +195,9 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
 
 
 def merge_by_glycopeptide_sequence(matches):
-    grouped = itertools.groupby(matches, lambda x: x["Glycopeptide_identifier"])
+    groups = collectiontools.groupby(matches, lambda x: x["Glycopeptide_identifier"])
     merged_matches = []
-    for glycopeptide, matches in grouped:
+    for glycopeptide, matches in groups.items():
         merged_matches.append(merge_matches(matches))
 
     return merged_matches
@@ -234,15 +230,22 @@ def merge_matches(matches):
 
 
 def merge_ion_matches(matches):
+    groups = collectiontools.groupby(itertools.chain.from_iterable(matches),
+                                     lambda x: x["key"])
     best_matches = []
     fabs = math.fabs
-    grouped_by_key = itertools.groupby(itertools.chain.from_iterable(matches), lambda x: x["key"])
-    for key, matched_key in grouped_by_key:
-        best_match = matched_key.next()
+    # for match in itertools.chain.from_iterable(matches):
+    #     groups[match["key"]].append(match)
+    for key, matched_key in groups.items():
+        best_match = matched_key[0]
         best_ppm = fabs(best_match["ppm_error"])
-        for match in matched_key:
+        ppm_to_scan_id = {best_match["scan_id"]: best_match["ppm_error"]}
+        for match in matched_key[1:]:
+            ppm_to_scan_id[match["scan_id"]] = match["ppm_error"]
             if fabs(match["ppm_error"]) < best_ppm:
                 best_match = match
+                best_ppm = fabs(match["ppm_error"])
+        best_match["scan_map"] = ppm_to_scan_id
         best_matches.append(best_match)
     return best_matches
 
@@ -264,8 +267,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
 
     pool = multiprocessing.Pool(n_processes)
 
-    data = decon_format_lookup[decon_data_format](decon_data)
-    print("Loading observed ions complete")
+    data = ParallelParser(decon_format_lookup[decon_data_format], (decon_data,))
 
     theoretical_search_space = try_deserialize(theo_fragment_file)
     if outfile is None:
@@ -289,19 +291,25 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
 
     results = []
     did_match_counter = Counter()
+
+    data = data.await()
+
     task_fn = functools.partial(match_observed_to_theoretical, ms1_tolerance=ms1_tolerance,
                                 ms2_tolerance=ms2_tolerance, observed_ions=data)
-    matcheing_process = pool.map(task_fn, theoretical_fragments, chunksize=len(theoretical_fragments)/n_processes)
-    for matches, counter in matcheing_process:
+    matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
+                                           chunksize=len(theoretical_fragments)/n_processes)
+    for matches, counter in matching_process:
         results.extend(matches)
         did_match_counter += counter
 
+    pool.close()
+    pool.join()
     if(len(results) < 1):
         raise NoIonsMatchedException(
             "No matches found from theoretical ions in MS2 deconvoluted results")
 
-    save_unmerged = multiprocessing.Process(target=save_interm, args=(results, "unmerged-matches"))
-    save_unmerged.start()
+    # save_unmerged = multiprocessing.Process(target=save_interm, args=(results, "unmerged-matches"))
+    # save_unmerged.start()
 
     merged_results = merge_by_glycopeptide_sequence(results)
 
@@ -309,13 +317,11 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
         "metadata": metadata,
         "matched_ions": merged_results
     }
-    print("Matching done")
     f = open(outfile + '.json', 'wb')
     json.dump(results, f)
     f.close()
 
     if(split_decon_data):
-        print("Splitting")
         match, no_match = split_decon_data_by_index(data, did_match_counter)
         save_split_decon_data(match, no_match,
                               "{root}.{tag}".format(root=splitext(decon_data)[0],

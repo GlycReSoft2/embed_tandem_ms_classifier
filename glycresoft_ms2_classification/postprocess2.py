@@ -14,7 +14,6 @@ def main(matched_ions_file, output_file=None):
         output_file = try_get_outfile(matched_ions_file, "processed")
     results = try_deserialize(matched_ions_file)
     scored_results = []
-    print((matched_ions_file))
     metadata = results["metadata"]
     matched_ions = results["matched_ions"]
 
@@ -51,7 +50,6 @@ def main(matched_ions_file, output_file=None):
             percent_y_HexNAc = y_HexNAc_found / total_possible_y_HexNAc
 
         stubs = rows["Stub_ions"]
-        stubs_found = len(stubs)
 
         Oxoniums = rows["Oxonium_ions"]
         glycan_lib.parse_glycan_pack_string(rows["Glycan"], glycan_identities)
@@ -94,11 +92,10 @@ def main(matched_ions_file, output_file=None):
                                "percent_y_ion_with_HexNAc_coverage": percent_y_HexNAc,
                                "percent_b_ion_coverage": percent_b,
                                "percent_y_ion_coverage": percent_y,
-                               "#_of_stubs_found": stubs_found,
                                "scan_id": rows['scan_id'],
                                "scan_id_range": rows["scan_id_range"],
                                "bad_oxonium_ions": bad_oxonium_ions,
-                               "glycan_map": glycans
+                               "glycan_composition": glycans
                                })
 
     results = {
@@ -111,7 +108,7 @@ def main(matched_ions_file, output_file=None):
         f.close()
         return (output_file + '.json', results)
     else:
-        return results
+        return None, results
 
 
 if __name__ == '__main__':

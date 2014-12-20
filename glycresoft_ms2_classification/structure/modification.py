@@ -2,12 +2,13 @@ import csv
 from copy import deepcopy
 import os
 import re
+#from pkg_resources import resource_string
 
 from collections import defaultdict
 from collections import Sequence as SequenceCollectionABC
 
 from .residue import residue_to_symbol
-from .residue import symbol_to_residue
+#from .residue import symbol_to_residue
 from . import PeptideSequenceBase
 from . import ModificationBase
 from . import ResidueBase
@@ -238,7 +239,7 @@ class AnonymousModificationRule(ModificationRule):
             "AnonymousModificationRule does not support site validation")
 
     def serialize(self):
-        return "@@" + self.name + "-" + str(self.mass)
+        return "@" + self.name + "-" + str(self.mass)
 
     def __repr__(self):
         rep = "{name}:{mass}".format(
@@ -353,6 +354,16 @@ class ModificationTable(dict):
             self[name].targets.discard(target)
         else:
             self.pop(name)
+
+    def __getitem__(self, key):
+        try:
+            return dict.__getitem__(self, key)
+        except KeyError, err:
+            try:
+                name = protein_prospector_name_cleaner.search(key).groupdict()["name"]
+            except:
+                raise err
+            return dict.__getitem__(self, name)
 
     def get_modification(self, name, position=-1, number=1):
         try:

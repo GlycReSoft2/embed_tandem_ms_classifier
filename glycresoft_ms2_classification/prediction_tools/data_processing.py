@@ -2,6 +2,8 @@ import json
 from math import fabs
 import re
 from cStringIO import StringIO
+from types import MethodType
+from functools import partial
 
 import pandas as pd
 import numpy as np
@@ -112,7 +114,8 @@ def prepare_model_file(path):
         data["numStubs"] = map(len, data["Stub_ions"])
     if "percent_b_ion_coverage" not in data:
         shim_percent_calcs(data)
-    data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(glycosites)
+    data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(
+        glycosites)
     ion_coverage_score(data)
     modification_signature(data)
     infer_glycan_mass(data)
@@ -124,11 +127,12 @@ def prepare_model_file(path):
 # complex fields JSON encoded.
 def save_model_file(data_struct, path):
     if isinstance(data_struct, PredictionResults):
-        data_struct.serialize(path)
-        return
+        data_struct.serialize(path + ".json")
+        return path + ".json"
     write_copy = data_struct.copy()
     serialize_compound_fields(write_copy)
-    write_copy.to_csv(path, index=False, encoding="utf-8")
+    write_copy.to_csv(path + ".csv", index=False, encoding="utf-8")
+    return path + ".csv"
 
 
 def ion_coverage_score(data_struct):
@@ -157,25 +161,25 @@ def compute_ion_coverage_map(row):
     b_ion_coverage = np.zeros(peptide_length)
     for b_ion in row['b_ion_coverage']:
         ion = np.zeros(peptide_length)
-        ion[:int(b_ion['key'].replace("B", ''))] = 1
+        ion[:int(b_ion['key'].replace("B", '')) - 1] = 1
         b_ion_coverage += ion
 
     y_ion_coverage = np.zeros(peptide_length)
     for y_ion in row['y_ion_coverage']:
         ion = np.zeros(peptide_length)
-        ion[:int(y_ion['key'].replace("Y", ''))] = 1
+        ion[:int(y_ion['key'].replace("Y", '')) - 1] = 1
         y_ion_coverage += ion
 
     b_ions_with_HexNAc = np.zeros(peptide_length)
     for b_ion in row['b_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'B(\d+)\+', b_ion['key'])[0])] = 1
+        ion[:int(re.findall(r'B(\d+)\+', b_ion['key'])[0]) - 1] = 1
         b_ions_with_HexNAc += ion
 
     y_ions_with_HexNAc = np.zeros(peptide_length)
     for y_ion in row['y_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0])] = 1
+        ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0]) - 1] = 1
         y_ions_with_HexNAc += ion
 
     total_coverage += b_ion_coverage.astype(
@@ -190,12 +194,13 @@ def compute_ion_coverage_map(row):
         ::-1].astype(np.int32) | y_ions_with_HexNAc[::-1].astype(np.int32)) != 0)
 
     expected_ions = (peptide_length * 2.0) - 1
-    percent_expected_observed = (b_ions_covered + y_ions_covered) / expected_ions
+    percent_expected_observed = (
+        b_ions_covered + y_ions_covered) / expected_ions
 
     percent_uncovered = (sum(total_coverage == 0) / float(peptide_length))
     mean_coverage = total_coverage.mean() / (float(peptide_length))
 
-    hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1])/2.
+    hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1]) / 2.
 
     mean_hexnac_coverage = percent_expected_ions_with_hexnac_observed(row)
 
@@ -205,9 +210,9 @@ def compute_ion_coverage_map(row):
                       "meanHexNAcCoverage": mean_hexnac_coverage,
                       "peptideCoverageMap": list(total_coverage),
                       "hexNAcCoverageMap": list(hexnac_coverage),
-                      "bIonCoverage": b_ion_coverage + b_ions_with_HexNAc,
+                      "bIonCoverage": b_ion_coverage,
                       "bIonCoverageWithHexNAc": b_ions_with_HexNAc,
-                      "yIonCoverage": y_ion_coverage[::-1] + y_ions_with_HexNAc[::-1],
+                      "yIonCoverage": y_ion_coverage[::-1],
                       "yIonCoverageWithHexNAc":  y_ions_with_HexNAc[::-1]
                       })
 
@@ -228,6 +233,10 @@ def build_ion_map(ion_set, ion_type, length):
 # If the input DataFrame does not have an MS2 Score column, it will be removed
 # from the within-group sorting criteria.
 def determine_ambiguity(data_struct):
+    wrap = None
+    if isinstance(data_struct, PredictionResults):
+        wrap = data_struct
+        data_struct = data_struct.predictions
     data_struct['ambiguity'] = False
     groupings = data_struct.groupby(["MS1_Score", "Obs_Mass"])
     # Bit list for pandas.DataFrame sort function
@@ -251,6 +260,9 @@ def determine_ambiguity(data_struct):
 
     regroup = pd.concat(regrouping)
     regroup.drop("_abs_ppm_error", axis=1, inplace=True)
+    if wrap is not None:
+        wrap.predictions = regroup
+        return wrap
     return regroup
 
 
@@ -284,13 +296,15 @@ def call_by_coverage(data_struct, criterion_fn=None):
 
 def infer_glycan_mass(data_struct):
     hexNAc_mass = modification.ModificationTable.bootstrap()["HexNAc"].mass
-    glycopeptide_mass = data_struct.Glycopeptide_identifier.apply(lambda x: sequence.Sequence(x).mass)
-    glycan_mass = data_struct.Calc_mass - (glycopeptide_mass - (data_struct.glyco_sites * hexNAc_mass))
+    glycopeptide_mass = data_struct.Glycopeptide_identifier.apply(
+        lambda x: sequence.Sequence(x).mass)
+    glycan_mass = data_struct.Calc_mass - \
+        (glycopeptide_mass - (data_struct.glyco_sites * hexNAc_mass))
     data_struct["glycanMass"] = glycan_mass
     return data_struct
 
 
-#TODO
+# TODO
 def recalibrate_mass_accuracy(data_struct, ms1_tolerance, ms2_tolerance):
     ms1_recalibrated = data_struct.ppm_error.abs() <= ms1_tolerance
     recalibrated = data_struct.ix[ms1_recalibrated].apply(
@@ -310,6 +324,7 @@ def filter_tandem_matches_by_ppm(row, ms2_tolerance):
 
 
 class PredictionResultsJSONEncoder(json.JSONEncoder):
+    ''' '''
     def default(self, o):
         if isinstance(o, pd.DataFrame):
             return json.loads(o.to_json(orient="records"))
@@ -317,10 +332,52 @@ class PredictionResultsJSONEncoder(json.JSONEncoder):
             return json.JSONEncoder.default(self, o)
 
 
+class IndirectIndexer(object):
+    '''A stubby front-end to mimic the DataFrame indexer components like .ix[],
+    .loc[], and such. Since these use __getitem__ and __setitem__ to do their
+    work rather than direct function calls, must use an object'''
+    def __init__(self, wrapped_indexer_getter, wrapped_indexer_setter):
+        self.wrapped_indexer_getter = wrapped_indexer_getter
+        self.wrapped_indexer_setter = wrapped_indexer_setter
+
+    def __getitem__(self, inds):
+        return self.wrapped_indexer_getter(inds)
+
+    def __setitem__(self, inds, value):
+        self.wrapped_indexer_setter(inds, value)
+
+
 class PredictionResults(object):
+    '''An extension-by-composition of pandas.DataFrame, carrying a dictionary of
+    arbitrary metadata as well as a DataFrame of arbitrary values. Attempts to cover
+    most basic use-cases, forwarding all attribute requests not satisfied by the wrapping
+    composite to the DataFrame transparently. Operations that subset the DataFrame are
+    captured and rewrapped to propagate metadata. Currently does not support merges or
+    pandas's generic combination functions which do not pass through this class.'''
+
+    __schema_version = 0x0001
+
+    plugins = []
+
     def __init__(self, metadata, predictions):
         self.metadata = metadata
         self.predictions = predictions
+        # Stub Indexers
+        self.ix = IndirectIndexer(self.wrap_ix_get, self.wrap_ix_set)
+        self.loc = IndirectIndexer(self.wrap_loc_get, self.wrap_loc_set)
+        self.iloc = IndirectIndexer(self.wrap_iloc_get, self.wrap_iloc_set)
+
+        version = self.metadata.get("schema_version", None)
+        if version is None:
+            self.schema_upgrade(version)
+            self.metadata["schema_version"] = PredictionResults.__schema_version
+            # May need to run some update code in the future
+        if version != PredictionResults.__schema_version:
+            self.schema_upgrade(version)
+            # May need to run some update code in the future
+
+    def schema_upgrade(self, version):
+        pass
 
     def __getitem__(self, inds):
         return self.predictions[inds]
@@ -333,12 +390,88 @@ class PredictionResults(object):
             return object.__getattribute__(self, name)
         except:
             try:
-                return getattr(object.__getattribute__(self, "predictions"), name)
+                out = getattr(object.__getattribute__(self, "predictions"), name)
+                if isinstance(out, MethodType):
+                    out = partial(self._framewrapper_fn, name)
+                return out
             except:
-                raise AttributeError("Prediction Results has no attribute {attr}".format(attr=name))
+                raise AttributeError(
+                    "Prediction Results has no attribute {attr}".format(attr=name))
+
+    def __repr__(self):
+        rep = "<PredictionResults>\n{frame}".format(frame=repr(self.predictions))
+        return rep
+
+    def __iter__(self):
+        return iter(self.predictions)
+
+    def __dir__(self):
+        return ["metadata"] + [attr for attr in dir(self.predictions) if "__" not in attr]
 
     def __contains__(self, name):
         return name in self.predictions
+
+    def wrap_ix_get(self, index):
+        df = self.predictions.ix[index]
+        return PredictionResults(self.metadata, df)
+
+    def wrap_ix_set(self, index, value):
+        self.predictions.ix[index] = value
+
+    def wrap_loc_get(self, index):
+        df = self.predictions.loc[index]
+        return PredictionResults(self.metadata, df)
+
+    def wrap_loc_set(self, index, value):
+        self.predictions.loc[index] = value
+
+    def wrap_iloc_get(self, index):
+        df = self.predictions.iloc[index]
+        return PredictionResults(self.metadata, df)
+
+    def wrap_iloc_set(self, index, value):
+        self.predictions.iloc[index] = value
+
+    @property
+    def fdr(self):
+        return self.metadata.get("fdr", None)
+
+    def _framewrapper_fn(self, attr, *args, **kwargs):
+        out = getattr(self.predictions, attr)(*args, **kwargs)
+        if isinstance(out, pd.DataFrame):
+            out = PredictionResults(self.metadata, out)
+        return out
+
+    def score_naive(self, peptide_weight=0.5, hexnac_weight=0.5):
+        if (peptide_weight + hexnac_weight) != 1.0:
+            raise ValueError("Peptide and HexNAc Weights must sum to 1.0")
+        return (self.meanCoverage * peptide_weight) + (self.meanHexNAcCoverage * hexnac_weight) \
+            - (self.percentUncovered)
+
+    def optimize_fdr(self):
+        if "fdr" not in self.metadata:
+            raise KeyError("The FDR has not been calculated")
+        fdr = self.metadata.get("fdr")
+        return fdr.ix[fdr.query("false_discovery_rate <= 0.05").num_real_matches.idxmax()]
+
+    def serialize(self, target_buffer=None):
+        if target_buffer is None:
+            target_buffer = StringIO()
+        if isinstance(target_buffer, basestring):
+            target_buffer = open(target_buffer, "wb")
+        encoder = PredictionResultsJSONEncoder()
+
+        serialize_data = {
+            "metadata": self.metadata,
+            "predictions": self.predictions
+        }
+
+        for plugin in PredictionResults.plugins:
+            plugin.serialize(self, serialize_data)
+
+        for chunk in encoder.iterencode(serialize_data):
+            target_buffer.write(chunk)
+        return target_buffer
 
     @classmethod
     def deserialize(cls, data_buffer):
@@ -346,26 +479,23 @@ class PredictionResults(object):
             data_buffer = open(data_buffer, "rb")
         loose_data = json.load(data_buffer)
         metadata = loose_data["metadata"]
+        if "fdr" in metadata:
+            metadata["fdr"] = pd.DataFrame(metadata["fdr"])
         predictions = loose_data["predictions"]
         predictions = cls.ensure_fields(predictions)
         instance = cls(metadata, predictions)
+
+        for plugin in PredictionResults.plugins:
+            plugin.deserialize(instance, loose_data)
+
         return instance
 
     @classmethod
     def prepare(cls, metadata, predictions):
         prediction_frame = PredictionResults(metadata, predictions)
-        prediction_frame.predictions = prediction_frame.ensure_fields(predictions)
+        prediction_frame.predictions = prediction_frame.ensure_fields(
+            predictions)
         return prediction_frame
-
-    def serialize(self, target_buffer=None):
-        if target_buffer is None:
-            target_buffer = StringIO()
-        if isinstance(target_buffer, basestring):
-            target_buffer = open(target_buffer, "wb")
-        encoder = PredictionResultsJSONEncoder(encoding="ascii")
-        for chunk in encoder.iterencode(self.__dict__):
-            target_buffer.write(chunk)
-        return target_buffer
 
     @staticmethod
     def ensure_fields(raw_predictions):
@@ -373,8 +503,16 @@ class PredictionResults(object):
         data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
         # Handle Decoys
         data.ix[np.isnan(data.vol)].vol = -1
-        data.ix[np.isnan(data.startAA)].startAA = -1
-        data.ix[np.isnan(data.endAA)].endAA = -1
+        try:
+            data.ix[data.startAA.isnull()].startAA = -1
+            data.ix[np.isnan(data.startAA)].startAA = -1
+        except TypeError:
+            data.startAA = -1
+        try:
+            data.ix[data.endAA.isnull()].endAA = -1
+            data.ix[np.isnan(data.endAA)].endAA = -1
+        except TypeError:
+            data.endAA = -1
         if "bad_oxonium_ions" not in data:
             data["bad_oxonium_ions"] = data.Oxonium_ions.apply(lambda x: [])
         if "peptideLens" not in data:
@@ -385,16 +523,30 @@ class PredictionResults(object):
             data["numStubs"] = map(len, data["Stub_ions"])
         if "percent_b_ion_coverage" not in data:
             shim_percent_calcs(data)
-        data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(glycosites)
+        data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(
+            glycosites)
         ion_coverage_score(data)
         modification_signature(data)
         infer_glycan_mass(data)
         return data
 
 
+class PredictionResultsPlugin(object):
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def serialize(self, instance, json_dict):
+        pass
+
+    def deserialize(self, instance, json_dict):
+        pass
+
+
+
 def convert_csv_to_nested(path):
     frame = prepare_model_file(path)
     metadata = {
+        # Shim in the ms1_results_file path
         "ms1_results_file": path,
         "_converted": True
     }

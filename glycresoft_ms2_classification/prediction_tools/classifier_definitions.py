@@ -14,7 +14,6 @@ model_definitions = {
     "full": [
         "meanCoverage",
         "percentUncovered",
-        #"abs_ppm_error",
         "ppm_error",
         "meanHexNAcCoverage",
         "peptideLens"
@@ -129,6 +128,6 @@ def generate_null_model(classifier, data_struct, formula=None, model_fit_args=No
         model_fit_args = dict()
 
     null_classifier = clone(classifier)
-    random_labels = np.random.uniform(0, 1, len(data_struct)) > .5
+    random_labels = np.random.uniform(0, 1, len(data_struct.index)) > .5
     null_classifier.fit(data_struct[formula], random_labels, **model_fit_args)
     return null_classifier, random_labels

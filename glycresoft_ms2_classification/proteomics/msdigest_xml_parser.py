@@ -3,6 +3,7 @@ try:
 except ImportError:
     import urllib.parse as url_parser  # python 3
 from xml .etree import cElementTree as ET
+import json
 
 
 def uri_decode(uri):
@@ -41,3 +42,10 @@ class MSDigestParamters(object):
         self.variable_modifications = variable_modifications
         self.missed_cleavages = missed_cleavages
         self.enzyme = enzyme
+
+    def __repr__(self):
+        return json.dumps(self.__dict__, indent=2)
+
+if __name__ == '__main__':
+    import sys
+    print(MSDigestParamters.parse(sys.argv[1]))

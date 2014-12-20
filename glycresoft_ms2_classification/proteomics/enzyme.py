@@ -2,6 +2,11 @@
 enzymes = {
     "trypsin": {
         "cleavage_start": [""],
-        "cleavage_end": ["K", "R"]
+        "cleavage_end": ["K", "R"],
+        "name": "trypsin"
     }
 }
+
+
+def get_enzyme(name):
+    return enzymes[name.lower()]

@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 
 # Ensure our scripts are imported before any others since we can't depend upon
 # the packaging middleware to handle relative imports, or should we vendorize
@@ -15,7 +16,6 @@ try:
 except ImportError:
     import urllib.parse as url_parser  # python 3
 
-# Import all error code exceptions. Yes. All of them. A valid use of *
 from error_code_interface import *
 # Import the pipeline modules, wrapping any ImportErrors in the cross-runtime communication
 # exception.
@@ -51,12 +51,11 @@ def load_parameters(param_file):
     return params
 
 
-def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications):
+def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications,
+                                   enzyme_info):
     try:
-        # res = theoretical_glycopeptide.main(ms1_results_file, sites_file,
-        #                                      constant_modifications, variable_modifications, None)
         path, fragments = theoretical_glycopeptide.main(ms1_results_file, sites_file, constant_modifications,
-                                                        variable_modifications, None)
+                                                        variable_modifications, enzyme_info)
         return path
     except NoSitesFoundException, e:
         raise NoSitesFoundWrapperException(str(e))
@@ -137,12 +136,12 @@ def build_model_app_function(
     ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
     ms1_match_tolerance, ms2_match_tolerance,
     constant_modification_list=None,
-    variable_modification_list=None,
+    variable_modification_list=None, enzyme=None,
     method="full_random_forest",
         out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(
         ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list)
+        constant_modification_list, variable_modification_list, enzyme)
     # print(theoretical_ion_space_file)
     intermediary_files.append(theoretical_ion_space_file)
     matched_ions_file = match_deconvoluted_ions(
@@ -162,12 +161,12 @@ def classify_with_model_app_function(
     ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
     ms1_match_tolerance, ms2_match_tolerance,
     constant_modification_list=None,
-    variable_modification_list=None,
+    variable_modification_list=None, enzyme=None,
     method="full_random_forest", model_file=None,
         out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(
         ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list)
+        constant_modification_list, variable_modification_list, enzyme)
     # print(theoretical_ion_space_file)
     intermediary_files.append(theoretical_ion_space_file)
     matched_ions_file = match_deconvoluted_ions(
@@ -202,7 +201,6 @@ def model_diagnostics_app_function(model_file, method="full_random_forest"):
 
 
 def main():
-    #atexit.register(lambda: clean_up_files(*intermediary_files))
     import argparse
     app = argparse.ArgumentParser()
     subparsers = app.add_subparsers()
@@ -219,6 +217,9 @@ def main():
         "--ms1-results-file", action="store", required=True)
     build_model_app.add_argument(
         "--glycosylation-sites-file", action="store", required=True)
+    build_model_app.add_argument("-e", "--enzyme", action="store", help="Name of the enzyme used")
+    build_model_app.add_argument("-p", "--protein_prospector_xml", action="store", help="path to msdgist XML file.\
+     Instead of --enzyme,--constant_modifications and --variable_modifications")
     build_model_app.add_argument(
         "--deconvoluted-spectra-file", action="store", required=True)
     build_model_app.add_argument("--method", action="store", default="full_random_forest",
@@ -226,11 +227,11 @@ def main():
                                  help="Select the model method to use for classification")
     build_model_app.add_argument(
         "--ms1-match-tolerance", type=float, action="store",
-        default=match_ions.ms1_tolerance_default,
+        default=match_ions2.ms1_tolerance_default,
         help="Mass Error Tolerance for matching MS1 masses in PPM")
     build_model_app.add_argument(
         "--ms2-match-tolerance", type=float, action="store",
-        default=match_ions.ms2_tolerance_default,
+        default=match_ions2.ms2_tolerance_default,
         help="Mass Error Tolerance for matching MS2 masses in PPM")
     build_model_app.add_argument("--protein-prospector-xml", default=None, help="Parse out modification\
                                  information form the Protein Prospector XML output")
@@ -263,11 +264,11 @@ def main():
                                          action="store", default=None, required=True)
     classify_with_model_app.add_argument(
         "--ms1-match-tolerance", type=float, action="store",
-        default=match_ions.ms1_tolerance_default,
+        default=match_ions2.ms1_tolerance_default,
         help="Mass Error Tolerance for matching MS1 masses in PPM")
     classify_with_model_app.add_argument(
         "--ms2-match-tolerance", type=float, action="store",
-        default=match_ions.ms2_tolerance_default,
+        default=match_ions2.ms2_tolerance_default,
         help="Mass Error Tolerance for matching MS2 masses in PPM")
     classify_with_model_app.add_argument("--protein-prospector-xml", default=None, help="Parse out modification\
                                  information form the Protein Prospector XML output")
@@ -277,7 +278,9 @@ def main():
     classify_with_model_app.add_argument(
         "--variable-modification-list", type=str, action="append", default=None,
         help="Pass the list of variable modifications to include in the sequence search space")
-
+    classify_with_model_app.add_argument("-e", "--enzyme", action="store", help="Name of the enzyme used")
+    classify_with_model_app.add_argument("-p", "--protein_prospector_xml", action="store", help="path to msdgist\
+                                XML file. Instead of --enzyme,--constant_modifications and --variable_modifications")
     classify_with_model_app.add_argument("--out", action="store", default=None)
     classify_with_model_app.set_defaults(func=classify_with_model_app_function)
 
@@ -309,7 +312,7 @@ def main():
         args = app.parse_args()
         args = args.__dict__
         func = args.pop("func")
-        debug = args.pop("debug", False)
+        debug = args.pop("debug", os.environ.get("GLYCRESOFT_DEBUG", False))
 
         if 'constant_modification_list' in args:
             args['constant_modification_list'] = uri_decode_list(
@@ -323,6 +326,7 @@ def main():
             ms_digest = MSDigestParamters.parse(args["protein_prospector_xml"])
             args["constant_modification_list"] = ms_digest.constant_modifications
             args["variable_modification_list"] = ms_digest.variable_modifications
+            args["enzyme"] = ms_digest.enzyme
         args.pop("protein_prospector_xml", None)
 
         param_file = args.pop("parameter_file", None)
@@ -331,13 +335,19 @@ def main():
             args.update(params)
         if debug:
             print(json.dumps(args, indent=4))
+            logging.info(json.dumps(args, indent=4))
+            logging.basicConfig(filename="debug.txt", level=logging.DEBUG)
+        else:
+            atexit.register(lambda: clean_up_files(*intermediary_files))
         func(**args)
     except GlycReSoftInterprocessCommunicationException, e:
         print(e)
         exit(e.errcode)
-    except Exception, e:
-        exit(-255)
+    # except Exception, e:
+    #     print(e)
+    #     exit(-255)
     exit(0)
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     main()

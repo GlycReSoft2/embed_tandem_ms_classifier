@@ -3,8 +3,14 @@ import unittest
 import warnings
 import csv
 import json
+import logging
+from multiprocessing import util as multiprocessing_util
 
-from glycresoft_ms2_classification.proteomics.xml_parser import MSDigestParamters
+logging.basicConfig(level=logging.DEBUG)
+multiprocessing_util.log_to_stderr(level=logging.DEBUG)
+
+
+from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
 from glycresoft_ms2_classification import theoretical_glycopeptide
 from glycresoft_ms2_classification import calculate_fdr
 from glycresoft_ms2_classification import entry_point
@@ -12,7 +18,10 @@ from glycresoft_ms2_classification import classify_matches
 
 from glycresoft_ms2_classification.structure import sequence
 from glycresoft_ms2_classification.structure import composition
+from glycresoft_ms2_classification.structure import constants
 
+# if int(os.environ.get("PARTIAL_HEXNAC_LOSS", 0)) == 0:
+#     constants.PARTIAL_HEXNAC_LOSS = False
 
 sequence_str = "QQQHLFGSNVTDC(Carbamidomethyl)SGNFC(Carbamidomethyl)LFR"
 
@@ -46,7 +55,7 @@ proton_mass = 1.00727647
 
 class IonMatchingPipeline(unittest.TestCase):
     ms1_matching_output_file = "test_data/MS1-matching-output 20131219_005.csv"
-    ms2_decon_file = "test_data/YAML-input-for-MS2-20131219_005.mzML.results"
+    ms2_decon_file = "test_data/USSR_Ungrouped.yaml"
     glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
     protein_prospector_file = "test_data/KK-USSR-digest-Prospector output.xml"
     constant_modifications = ["Carbamidomethyl (C)"]
@@ -70,7 +79,8 @@ class IonMatchingPipeline(unittest.TestCase):
         ms_digest = MSDigestParamters.parse(self.protein_prospector_file)
         theo_ions = entry_point.generate_theoretical_ion_space(
             self.ms1_matching_output_file, self.glycosylation_sites_file,
-            ms_digest.constant_modifications, ms_digest.variable_modifications)
+            ms_digest.constant_modifications, ms_digest.variable_modifications,
+            ms_digest.enzyme)
         self.assertTrue(os.path.exists(theo_ions))
         self.theoretical_ion_space_file = theo_ions
         theoretical_ions = json.load(open(theo_ions))
@@ -105,36 +115,35 @@ class IonMatchingPipeline(unittest.TestCase):
                                                               method=self.method)
         print(self.model_file_path)
         self.assertTrue(os.path.exists(self.model_file_path))
-        print(warnings.onceregistry)
 
     def test_5_classify_with_model_step(self):
         print("test_5_classify_with_model_step")
         warnings.simplefilter(action="error")
+        print(self.test_model_file_path)
         self.classification_results_file = entry_point.classify_data_by_model(self.postprocessed_ions_file,
                                                                               self.test_model_file_path,
                                                                               method=self.method)
         self.assertTrue(os.path.exists(self.classification_results_file))
 
-    # def test_6_evaluate_model_step(self):
-    #     print("test_6_evaluate_model_step")
-    #     for method in self.methods:
-    #         try:
-    #             self.model_eval_file = entry_point.ModelDiagnosticsTask(
-    #                 self.test_model_file_path, method).run()
-    #             self.assertTrue(os.path.exists(self.model_eval_file))
-    #         except IOError, e:
-    #             # Windows doesn't like really long file names.
-    #             print(e)
+    def test_6_evaluate_model_step(self):
+        print("test_6_evaluate_model_step")
+        for method in self.methods:
+            try:
+                self.model_eval_file = entry_point.ModelDiagnosticsTask(
+                    self.test_model_file_path, method).run()
+                self.assertTrue(os.path.exists(self.model_eval_file))
+            except IOError, e:
+                # Windows doesn't like really long file names.
+                print(e)
 
-    # def test_7_calculate_fdr_step(self):
-    #     print("test_7_calculate_fdr_step")
+    def test_7_calculate_fdr_step(self):
+        print("test_7_calculate_fdr_step")
 
-    #     predicates = calculate_fdr.default_predicates()
-    #     self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
-    #                                           self.test_model_file_path, suffix_len=1,
-    #                                           predicate_fns=predicates)
-    #     self.assertTrue(os.path.exists(self.classification_results_file[:-4] + "_fdr.csv"))
-    #     self.assertTrue(os.path.exists(self.classification_results_file[:-4] + ".decoy.ion_space.csv"))
+        predicates = calculate_fdr.default_predicates()
+        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
+                                              self.test_model_file_path, suffix_len=1,
+                                              predicate_fns=predicates)
+        self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
 
     # def test_8_apply_to_different_dataset(self):
     #     reclassified_file = entry_point.CompareModelsDiagnosticTask(self.test_model_file_path,
