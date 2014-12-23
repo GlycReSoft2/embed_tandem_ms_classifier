@@ -3,24 +3,13 @@ __all__ = [
     "modification",
     "composition",
     "fragment",
-    "glycan_masses",
+    "glycans",
     "residue",
     "stub_glycopeptides",
     "sequence_space"
 ]
-from argparse import Namespace
 
-constants = Namespace()
-## Constants
-# Tokenizer Constants
-constants.MOD_BEGIN = "("
-constants.MOD_END = ")"
-constants.GLYCAN_BEGIN = "["
-constants.GLYCAN_END = "]"
-# Sequence Fragment Constants
-constants.FRAG_OFFSET = 1
-constants.PARTIAL_HEXNAC_LOSS = True
-constants.EXCLUDE_B1 = True
+from constants import constants
 
 
 # A few base types for doing type-based behavior changes

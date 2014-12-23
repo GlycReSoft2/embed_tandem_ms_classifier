@@ -5,10 +5,9 @@ import re
 #from pkg_resources import resource_string
 
 from collections import defaultdict
-from collections import Sequence as SequenceCollectionABC
+from collections import Sequence as Iterable
 
 from .residue import residue_to_symbol
-#from .residue import symbol_to_residue
 from . import PeptideSequenceBase
 from . import ModificationBase
 from . import ResidueBase
@@ -20,6 +19,8 @@ protein_prospector_name_cleaner = re.compile(
 
 
 def extract_targets_from_string(target_string):
+    '''Parses the Protein Prospector modification name string to
+    extract the modification target specificity'''
     params = target_string_pattern.search(target_string).groupdict()
     amino_acid_targets = params.pop("amino_acid", None)
     amino_acid_targets = map(lambda x: residue_to_symbol.get(x, x), list(
@@ -34,12 +35,32 @@ def extract_targets_from_string(target_string):
 
 
 class ModificationTarget(object):
+
     '''Specifies the range of targets that a given modification can be found at.'''
+
+    @staticmethod
+    def from_unimod_specificity(specificity):
+        amino_acid = specificity["site"]
+        if amino_acid in set(["N-term", "C-term"]):
+            amino_acid = None
+        position_modifiers = specificity["position"]
+        if position_modifiers == "Anywhere":
+            position_modifiers = None
+        elif position_modifiers == "Protein N-term" or position_modifiers == "Any N-term":
+            position_modifiers = "N-term"
+        elif position_modifiers == "Protein C-term" or position_modifiers == "Any C-term":
+            position_modifiers = "C-term"
+        else:
+            raise Exception("Undefined Position, " + position_modifiers)
+        return ModificationTarget(amino_acid, position_modifiers)
+
     def __init__(self, site_targets=None, position_modifiers=None):
         self.amino_acid_targets = site_targets
         self.position_modifiers = position_modifiers
 
     def valid_site(self, amino_acid=None, position_modifiers=None):
+        '''Return if a given residue at a sequence position (N-term, C-term, None)
+        is valid'''
         if isinstance(amino_acid, ResidueBase):
             amino_acid = amino_acid.symbol
         amino_acid = residue_to_symbol.get(amino_acid, amino_acid)
@@ -48,13 +69,13 @@ class ModificationTarget(object):
         valid = (self.amino_acid_targets is None) or (
             amino_acid in self.amino_acid_targets)
         valid = valid and ((self.position_modifiers is None) or
-                          (position_modifiers in self.position_modifiers))
+                           (position_modifiers in self.position_modifiers))
 
         return valid
 
     def valid_site_seq(self, sequence, position, position_modifiers=None):
         if(isinstance(sequence, PeptideSequenceBase)):
-            amino_acid = sequence.at(position)[0]
+            amino_acid = sequence[position][0]
         else:
             amino_acid = sequence[position]
         return self.valid_site(amino_acid, position_modifiers)
@@ -79,6 +100,8 @@ class ModificationTarget(object):
 
 class ModificationTargetPattern(ModificationTarget):
 
+    '''Specifies a modification target by regex'''
+
     def __init__(self, site_targets=None, position_modifiers=None, target_offset=0):
         super(ModificationTargetPattern, self).__init__(
             site_targets, position_modifiers)
@@ -98,6 +121,7 @@ class ModificationTargetPattern(ModificationTarget):
 
 
 def get_position_modifier_rules_dict(sequence):
+    '''Labels the start and end indices of the sequence'''
     return defaultdict(lambda: None, **{
         0: "N-term",
         (len(sequence) - 1): "C-term"
@@ -109,8 +133,41 @@ class ModificationRule(object):
     '''Represent the name, mass, and position specifities associated with a given modification.
     Additionally stores information on the represented modification in Protein Prospector.'''
 
+    @staticmethod
+    def from_protein_prospector(amino_acid_specificity, modification_name,
+                                protein_prospector_name=None, monoisotopic_mass=None):
+        # If the specificity is a string, parse it into rules
+        targets = None
+        if isinstance(amino_acid_specificity, str):
+            try:
+                targets = set(
+                    [extract_targets_from_string(amino_acid_specificity)])
+            except TypeError:
+                print(modification_name, amino_acid_specificity)
+                raise TypeError("Could not extract targets")
+
+        # If the specificity is already a rule, store it as a list of one rules
+        elif isinstance(amino_acid_specificity, ModificationTarget):
+            targets = set([amino_acid_specificity])
+
+        # If the specificity is a collection of rules, store it as is
+        elif isinstance(amino_acid_specificity, Iterable) and\
+                isinstance(iter(amino_acid_specificity).next(), ModificationTarget):
+            targets = set(amino_acid_specificity)
+
+        return ModificationRule(targets, modification_name, protein_prospector_name, monoisotopic_mass)
+
+    @staticmethod
+    def from_unimod(unimod_entry):
+        specificity = unimod_entry["specificity"]
+        monoisotopic_mass = unimod_entry["mono_mass"]
+        full_name = unimod_entry["full_name"]
+        title = unimod_entry["title"]
+        specificity = (map(ModificationTarget.from_unimod_specificity, specificity))
+        return ModificationRule(specificity, full_name, title, monoisotopic_mass)
+
     def __init__(self, amino_acid_specificity, modification_name,
-                 protein_prospector_name, monoisotopic_mass, **kwargs):
+                 protein_prospector_name=None, monoisotopic_mass=None, **kwargs):
         # Attempt to parse the protein prospector name which contains the
         # target in
         try:
@@ -140,18 +197,23 @@ class ModificationRule(object):
             self.targets = set([amino_acid_specificity])
 
         # If the specificity is a collection of rules, store it as is
-        elif isinstance(amino_acid_specificity, SequenceCollectionABC) and\
+        elif isinstance(amino_acid_specificity, Iterable) and\
                 isinstance(iter(amino_acid_specificity).next(), ModificationTarget):
             self.targets = set(amino_acid_specificity)
+        else:
+            print(amino_acid_specificity, type(amino_acid_specificity))
+            raise Exception("Could not interpret target specificity")
 
     def valid_site(self, amino_acid=None, position_modifiers=None):
         return any([target.valid_site(amino_acid, position_modifiers) for
                     target in self.targets])
 
     def why_valid(self, amino_acid=None, position_modifiers=None):
-        possible_targets = [target for target in self.targets if target.valid_site(amino_acid, position_modifiers)]
+        possible_targets = [target for target in self.targets if target.valid_site(
+            amino_acid, position_modifiers)]
         if len(possible_targets) == 0:
-            raise Exception("No valid targets. %s for %s" % (amino_acid + position_modifiers, self))
+            raise Exception("No valid targets. %s for %s" %
+                            (amino_acid + position_modifiers, self))
         minimized_target = min(possible_targets, key=len)
         rule = deepcopy(self)
         rule.targets = minimized_target
@@ -188,10 +250,11 @@ class ModificationRule(object):
         return valid_indices
 
     def serialize(self):
+        '''A string representation for inclusion in sequences'''
         return self.name
 
     def __repr__(self):
-        rep = "{name}({protein_prospector_name}):{mass}:@{targets}".format(
+        rep = "{name}:{mass}".format(
             **self.__dict__)
         return rep
 
@@ -360,7 +423,8 @@ class ModificationTable(dict):
             return dict.__getitem__(self, key)
         except KeyError, err:
             try:
-                name = protein_prospector_name_cleaner.search(key).groupdict()["name"]
+                name = protein_prospector_name_cleaner.search(
+                    key).groupdict()["name"]
             except:
                 raise err
             return dict.__getitem__(self, name)
@@ -492,6 +556,7 @@ class RestrictedModificationTable(ModificationTable):
 
 
 class Modification(ModificationBase):
+
     """Represents a molecular modification, which may be bound at a given position,
     or may be present at multiple locations. This class apparently pulls double duty,
     and when describing the total number of modifications of a type on a molecule, its
@@ -504,7 +569,8 @@ class Modification(ModificationBase):
         if len(name) == 0:
             mass = 0.0
         elif "@" == name[0]:
-            mass = float(AnonymousModificationRule.parser.search(name).groupdict()['mass'])
+            mass = float(
+                AnonymousModificationRule.parser.search(name).groupdict()['mass'])
         else:
             mass = cls._table[name].mass
         return mass
@@ -525,10 +591,6 @@ class Modification(ModificationBase):
         self.position = mod_pos
         self.number = mod_num
         self.rule = rule
-        # try:
-        #     self.target = rule.targets[0].amino_acid_targets[0]
-        # except TypeError:
-        #     self.target = None
 
     def serialize(self):
         return self.rule.serialize()
@@ -543,5 +605,8 @@ class Modification(ModificationBase):
         return self.rule.find_valid_sites(sequence)
 
     def __repr__(self):
-        rep = "{name}[{number}]@{position}:{rule}".format(**self.__dict__)
+        rep = "{name}[{number}]".format(**self.__dict__)
         return rep
+
+    def __hash__(self):
+        return hash(str(self))

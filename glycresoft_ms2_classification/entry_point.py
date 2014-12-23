@@ -2,12 +2,7 @@ import os
 import sys
 import logging
 
-# Ensure our scripts are imported before any others since we can't depend upon
-# the packaging middleware to handle relative imports, or should we vendorize
-# pip or easy_install?
-sys.path = [(os.path.dirname(os.path.abspath(__file__)))] + sys.path
-
-#import atexit
+import atexit
 import json
 
 # Handles URI Decoding incompatibility with py2K
@@ -52,10 +47,10 @@ def load_parameters(param_file):
 
 
 def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications,
-                                   enzyme_info):
+                                   enzyme_info, n_processes):
     try:
         path, fragments = theoretical_glycopeptide.main(ms1_results_file, sites_file, constant_modifications,
-                                                        variable_modifications, enzyme_info)
+                                                        variable_modifications, enzyme_info, n_processes)
         return path
     except NoSitesFoundException, e:
         raise NoSitesFoundWrapperException(str(e))
@@ -63,11 +58,13 @@ def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifi
         raise UnqualifiedModificationWrapperException(str(e))
 
 
-def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra, ms1_match_tolerance, ms2_match_tolerance):
+def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra,
+                            ms1_match_tolerance, ms2_match_tolerance, n_processes):
     try:
         path, data = match_ions2.match_frags(
             theoretical_ion_space, deconvoluted_spectra,
             ms1_match_tolerance, ms2_match_tolerance, split_decon_data=True,
+            n_processes=n_processes,
             outfile=None)
         return path
     except match_ions2.NoIonsMatchedException, e:
@@ -138,14 +135,18 @@ def build_model_app_function(
     constant_modification_list=None,
     variable_modification_list=None, enzyme=None,
     method="full_random_forest",
+    n_processes=4,
         out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(
         ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list, enzyme)
+        constant_modification_list, variable_modification_list, enzyme,
+        n_processes=n_processes)
     # print(theoretical_ion_space_file)
     intermediary_files.append(theoretical_ion_space_file)
     matched_ions_file = match_deconvoluted_ions(
-        theoretical_ion_space_file, deconvoluted_spectra_file, ms1_match_tolerance, ms2_match_tolerance)
+        theoretical_ion_space_file, deconvoluted_spectra_file,
+        ms1_match_tolerance, ms2_match_tolerance,
+        n_processes=n_processes)
     # print(matched_ions_file)
     intermediary_files.append(matched_ions_file)
     postprocessed_ions_file = postprocess_matches(matched_ions_file)
@@ -163,14 +164,18 @@ def classify_with_model_app_function(
     constant_modification_list=None,
     variable_modification_list=None, enzyme=None,
     method="full_random_forest", model_file=None,
+    n_processes=4,
         out=None):
     theoretical_ion_space_file = generate_theoretical_ion_space(
         ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list, enzyme)
+        constant_modification_list, variable_modification_list,
+        enzyme, n_processes=n_processes)
     # print(theoretical_ion_space_file)
     intermediary_files.append(theoretical_ion_space_file)
     matched_ions_file = match_deconvoluted_ions(
-        theoretical_ion_space_file, deconvoluted_spectra_file, ms1_match_tolerance, ms2_match_tolerance)
+        theoretical_ion_space_file, deconvoluted_spectra_file,
+        ms1_match_tolerance, ms2_match_tolerance,
+        n_processes=n_processes)
     # print(matched_ions_file)
     intermediary_files.append(matched_ions_file)
     postprocessed_ions_file = postprocess_matches(matched_ions_file)
@@ -193,7 +198,7 @@ def reclassify_with_model_app_function(target_file, method="full_random_forest",
     return classification_results_file
 
 
-def model_diagnostics_app_function(model_file, method="full_random_forest"):
+def model_diagnostics_app_function(model_file, method="full_random_forest", **kwargs):
     task = ModelDiagnosticsTask(model_file_path=model_file, method=method)
     result = task.run()
     print(result)
@@ -207,6 +212,8 @@ def main():
 
     app.add_argument(
         "-d", "--debug", action='store_true', default=False, required=False)
+    app.add_argument("-n", "--n-processes", type=int, action="store",
+                     default=4, help="Number of procresses to use")
 
     # BUILD MODEL
     build_model_app = subparsers.add_parser(

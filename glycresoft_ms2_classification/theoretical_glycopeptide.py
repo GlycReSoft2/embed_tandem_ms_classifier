@@ -4,7 +4,6 @@ import re
 import json
 import multiprocessing
 import logging
-multiprocessing.log_to_stderr()
 import functools
 import itertools
 
@@ -130,7 +129,8 @@ def process_predicted_ms1_ion(row, modification_table, site_list, glycan_identit
 
     # Adjust the glycan_sites to relative position
     glycan_sites = [x - start_pos for x in glycan_sites]
-    ss = get_search_space(row, glycan_identity, glycan_sites, seq_str, mod_list)
+    ss = get_search_space(
+        row, glycan_identity, glycan_sites, seq_str, mod_list)
     seq_list = ss.get_theoretical_sequence(num_sites)
     fragments = [generate_fragments(seq, num_sites, glycan_comp, pep_mod, seq_str,
                                     theo_mass, mass_error, score, precur_mass,
@@ -170,13 +170,16 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
         "enable_partial_hexnac_match": constants.PARTIAL_HEXNAC_LOSS
     }
 
+    print(constants.PARTIAL_HEXNAC_LOSS)
+
     fragment_info = []
     pool = multiprocessing.Pool(n_processes)
 
     task_fn = functools.partial(process_predicted_ms1_ion, modification_table=modification_table,
                                 site_list=site_list, glycan_identity=glycan_identity)
 
-    fragment_info = list(itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000)))
+    fragment_info = list(
+        itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000)))
 
     if output_file is not False:
         print("Writing to file")
@@ -191,7 +194,8 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     pool.join()
     return output_file + '.json', data
 
-if __name__ == '__main__':
+
+def taskmain():
     import argparse
     parser = argparse.ArgumentParser(
         description="Generate all theoretical ions from input peptides and possible glycosylation sites")
@@ -208,7 +212,6 @@ if __name__ == '__main__':
         "--variable-modification-list", type=str, action="append", default=None,
         help="Pass the list of variable modifications to include in the sequence search space")
     args = parser.parse_args()
-
     main(result_file=args.fragment_file, site_file=args.site_file,
          constant_modification_list=args.constant_modification_list,
          variable_modification_list=args.variable_modification_list,

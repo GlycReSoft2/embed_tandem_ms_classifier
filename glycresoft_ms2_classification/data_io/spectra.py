@@ -1,4 +1,5 @@
 from ..structure.composition import composition_to_mass
+
 PROTON = composition_to_mass("p")
 
 

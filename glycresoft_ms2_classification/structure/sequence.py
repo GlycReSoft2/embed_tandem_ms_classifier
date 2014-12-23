@@ -1,7 +1,9 @@
+import re
 import copy
 import warnings
+import itertools
 
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from . import PeptideSequenceBase
 from . import constants as structure_constants
@@ -82,6 +84,11 @@ def sequence_tokenizer(sequence):
     return chunks, mods, glycan
 
 
+def sequence_length(sequence):
+    sequence, modifications, glycan = sequence_tokenizer(sequence)
+    return len(sequence)
+
+
 def strip_modifications(sequence):
     chunks, modifications, glycan = sequence_tokenizer(sequence)
     return ''.join([residue for residue, mod in chunks])
@@ -125,10 +132,19 @@ def list_to_sequence(seq_list, wrap=True):
     return seq
 
 
+def find_n_glycosylation_sequons(sequence_string):
+    n_s_matches = re.finditer(r"N[^\(P]S", sequence_string)
+    n_t_matches = re.finditer(r"N[^\(P]T", sequence_string)
+    matches = itertools.chain(n_s_matches, n_t_matches)
+    sites = [m.start() for m in matches]
+    return sites
+
+
 class Sequence(PeptideSequenceBase):
-
-    """Name and mass of residues (glycan/peptide)"""
-
+    '''
+    Represents a peptide that may have post-translational modifications
+    including glycosylation.
+    '''
     @classmethod
     def from_iterable(cls, iterable):
         seq = cls("")
@@ -151,11 +167,7 @@ class Sequence(PeptideSequenceBase):
         return seq
 
     def __init__(self, sequence):
-        try:
-            seq_list, modifications, glycan = sequence_tokenizer(sequence)
-        except:
-            print(sequence)
-            raise
+        seq_list, modifications, glycan = sequence_tokenizer(sequence)
         self.mass = 0.0
         self.seq = []
         self.mod_index = defaultdict(int)
@@ -171,9 +183,8 @@ class Sequence(PeptideSequenceBase):
                         mods.append(mod)
                         self.mod_index[mod.name] += 1
                         self.mass += mod.mass
-                    except:
-                        print(item, "Modification failed!", sequence, seq_list)
-                        raise
+                    except Exception, e:
+                        raise e
             self.seq.append([res, mods])
 
         # Environment
@@ -194,42 +205,29 @@ class Sequence(PeptideSequenceBase):
         return len(self.seq)
 
     def __iter__(self):
-        '''
-            Makes the sequence iterable
-        '''
+        '''Makes the sequence iterable'''
         for i in self.seq:
             yield(i)
 
     def __getitem__(self, index):
-        '''
-            A Pythonic way to access an index in the sequence
-        '''
+        '''A Pythonic way to access an index in the sequence'''
         sub = self.seq[index]
-        # if isinstance(index, slice):
-        #     sub = Sequence(sub)
         return sub
 
     # Backwards compatibility
     at = __getitem__
 
+    def __setitem__(self, index, value):
+        '''A Pythonic way to set the value at an index, but does not
+        try to validate the result.'''
+        self.seq[index] = value
+
     def subseq(self, slice):
         sub = self[slice]
         return Sequence.from_iterable(sub)
 
-    def __setitem__(self, index, value):
-        '''
-            A Pythonic way to set the value at an index, but does not
-            try to validate the result.
-        '''
-        self.seq[index] = value
-
-    def add_mass(self, pos, mass):
-        """
-            This function will direcly modify the mass of the residue instead of appending the modificaion.
-            Use it with caution!
-        """
-        self.seq[pos][0].mass += mass
-        self.mass += mass
+    def __hash__(self):
+        return hash(str(self))
 
     def break_at(self, idx):
         b_shift = Composition('H').mass - Composition('e').mass
@@ -343,8 +341,10 @@ class Sequence(PeptideSequenceBase):
             warnings.warn("Invalid modification! Negative Pos: %s Exceeded Length: %s" %
                           ((pos == -1), pos >= len(self.seq)))
             return -1
-
-        mod = Modification(rule=mod_type, mod_pos=pos)
+        if isinstance(mod_type, Modification):
+            mod = mod_type
+        else:
+            mod = Modification(rule=mod_type, mod_pos=pos)
         self.seq[pos][1].append(mod)
         self.mass += mod.mass
         self.mod_index[mod.name] += 1
@@ -380,18 +380,8 @@ class Sequence(PeptideSequenceBase):
     def get_sequence_list(self, start=0):
         return self.seq[start:]
 
-    def get_mass(self):
-        '''
-            A getter retained for backwards compatibility. Defines no special behavior to access mass.
-        '''
-        return self.mass
-
     def clone(self):
-        '''
-            Perform a deep copy of the sequence object by reserializing it and
-            then parsing the result.
-        '''
-        return Sequence(self.get_sequence())
+        return copy.deepcopy(self)
 
     def append(self, residue, modification=None):
         self.mass += residue.mass
@@ -419,6 +409,10 @@ class Sequence(PeptideSequenceBase):
         self.mass += sequence.mass
         for mod, count in sequence.mod_index.items():
             self.mod_index[mod] += count
+
+    @property
+    def n_glycan_sequon_sites(self):
+        return find_n_glycosylation_sequons(str(self))
 
 
 class GrowingSequence(Sequence):
@@ -462,3 +456,20 @@ class Protease(object):
         for pref in self.prefix:
             for suf in self.suffix:
                 yield "{0}{1}{2}".format(pref, str(sequence), suf)
+
+
+def cleave(sequence, rule, missed_cleavages=0, min_length=0, **kwargs):
+    '''A reimplementation of pyteomics.parser.cleave which produces leaky cleavages
+    of a peptide sequence by a regex rule. Includes the cut indices, not included in
+    pyteomics.'''
+    peptides = []
+    cleavage_sites = deque([0], maxlen=missed_cleavages+2)
+    for i in itertools.chain(map(lambda x: x.end(), re.finditer(rule, sequence)), [None]):
+        cleavage_sites.append(i)
+        for j in range(len(cleavage_sites)-1):
+            seq = sequence[cleavage_sites[j]:cleavage_sites[-1]]
+            if seq:
+                if min_length is None or sequence_length(seq) >= min_length:
+                    peptides.append((seq, cleavage_sites[j], cleavage_sites[-1] if cleavage_sites[-1]
+                                     is not None else sequence_length(sequence)))
+    return set(peptides)
