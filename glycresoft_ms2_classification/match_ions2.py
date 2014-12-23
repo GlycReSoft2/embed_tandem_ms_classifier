@@ -1,14 +1,13 @@
 import json
 import math
-from os.path import splitext
-from collections import Counter, defaultdict
-
 import multiprocessing
 import functools
 import itertools
-
 import logging
-multiprocessing.log_to_stderr()
+
+from os.path import splitext
+from collections import Counter
+
 
 from glycresoft_ms2_classification.error_code_interface import NoIonsMatchedException
 from glycresoft_ms2_classification.utils import try_deserialize, try_get_outfile, collectiontools
@@ -220,11 +219,11 @@ def merge_matches(matches):
     scan_ids = set()
     for match in matches:
         scan_ids.add(match["scan_id"])
-    for k, v in matches[0].items():
-        if k in fields_to_merge:
-            merged[k] = merge_ion_matches([m[k] for m in matches])
+    for ion_type, ion_series in matches[0].items():
+        if ion_type in fields_to_merge:
+            merged[ion_type] = merge_ion_matches([m[ion_type] for m in matches])
         else:
-            merged[k] = v
+            merged[ion_type] = ion_series
     merged["scan_id_range"] = list(scan_ids)
     return merged
 
@@ -234,8 +233,6 @@ def merge_ion_matches(matches):
                                      lambda x: x["key"])
     best_matches = []
     fabs = math.fabs
-    # for match in itertools.chain.from_iterable(matches):
-    #     groups[match["key"]].append(match)
     for key, matched_key in groups.items():
         best_match = matched_key[0]
         best_ppm = fabs(best_match["ppm_error"])
@@ -330,7 +327,7 @@ def match_frags(theo_fragment_file, decon_data, ms1_tolerance=ms1_tolerance_defa
     return outfile + '.json', results
 
 
-if __name__ == '__main__':
+def taskmain():
     import argparse
     app = argparse.ArgumentParser("match-frags")
     app.add_argument("theoretical_fragments")

@@ -111,6 +111,6 @@ def main(matched_ions_file, output_file=None):
         return None, results
 
 
-if __name__ == '__main__':
+def taskmain():
     import sys
     main(sys.argv[1])
