@@ -12,8 +12,12 @@ __all__ = [
 from constants import constants
 
 
+class MoleculeBase(object):
+    mass = None
+
+
 # A few base types for doing type-based behavior changes
-class PeptideSequenceBase(object):
+class PeptideSequenceBase(MoleculeBase):
     '''
     A base type for classes describing peptide sequences, with or without modifiations
     '''
@@ -24,14 +28,14 @@ class PeptideSequenceBase(object):
         pass
 
 
-class ModificationBase(object):
+class ModificationBase(MoleculeBase):
     '''
     A base type for classes describing peptide sequence modifications
     '''
     pass
 
 
-class ResidueBase(object):
+class ResidueBase(MoleculeBase):
     '''
     A base type for classes describing amino acid residues
     '''

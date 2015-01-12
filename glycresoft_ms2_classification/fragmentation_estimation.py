@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -116,3 +117,25 @@ def count_breaks(matched_ions):
             continue
         break_counts[glycopeptide] = counter
     return break_counts
+
+
+class BondBreakageCounter(object):
+    def __init__(self, *args, **kwargs):
+        self.data = pd.Series()
+
+    def __getitem__(self, key):
+        try:
+            self.data[key]
+        except:
+            return 0
+
+    def __setitem__(self, key, value):
+        try:
+            self.data[key] = value
+
+    def plot(self, *args, **kwargs):
+        return self.data.plot(*args, **kwargs)
+
+    def normalize(self):
+
+

@@ -4,11 +4,11 @@ import warnings
 import csv
 import json
 import logging
-from multiprocessing import util as multiprocessing_util
 
 logging.basicConfig(level=logging.DEBUG)
-multiprocessing_util.log_to_stderr()
+#multiprocessing_util.log_to_stderr()
 
+from sqlitedict import SqliteDict
 
 from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
 from glycresoft_ms2_classification import theoretical_glycopeptide
@@ -18,42 +18,10 @@ from glycresoft_ms2_classification import classify_matches
 
 from glycresoft_ms2_classification.structure import sequence
 from glycresoft_ms2_classification.structure import composition
-from glycresoft_ms2_classification.structure import constants
-
-# if int(os.environ.get("PARTIAL_HEXNAC_LOSS", 0)) == 0:
-#     constants.PARTIAL_HEXNAC_LOSS = False
-
-sequence_str = "QQQHLFGSNVTDC(Carbamidomethyl)SGNFC(Carbamidomethyl)LFR"
-
-b_ion_fragment_masses = [
-    129.065853575,
-    257.124431115,
-    385.183008655,
-    522.24192053,
-    635.325984545,
-    782.39439849,
-    839.415862225,
-    926.44789066,
-    1040.49081813,
-    1139.55923207,
-    1240.60691058,
-    1355.63385365,
-    1515.66450215,
-    1602.69653058,
-    1659.71799432,
-    1773.76092179,
-    1920.82933573,
-    2080.85998424,
-    2193.94404825,
-    2341.0124622,
-]
-
-sequence_mass = 2514.11686191
-electron_mass = 0.000549
-proton_mass = 1.00727647
 
 
 class IonMatchingPipeline(unittest.TestCase):
+    db_file_name = "test_data/MS1-matching-output 20131219_005.db"
     ms1_matching_output_file = "test_data/MS1-matching-output 20131219_005.csv"
     ms2_decon_file = "test_data/USSR_Ungrouped.yaml"
     glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
@@ -64,6 +32,7 @@ class IonMatchingPipeline(unittest.TestCase):
     methods = classify_matches.ModelTask.method_table.keys()
     ms1_match_tolerance = 1E-05
     ms2_match_tolerance = 2E-05
+    num_procs = 6
 
     theoretical_ion_space_file = "test_data/MS1-matching-output 20131219_005.theoretical_ions.json"
     ms2_match_file = "test_data/MS1-matching-output 20131219_005.match_frags.json"
@@ -76,16 +45,15 @@ class IonMatchingPipeline(unittest.TestCase):
 
     def test_1_theoretical_ion_space_step(self):
         print("test_1_theoretical_ion_space_step")
-        print(constants)
         ms_digest = MSDigestParamters.parse(self.protein_prospector_file)
         theo_ions = entry_point.generate_theoretical_ion_space(
             self.ms1_matching_output_file, self.glycosylation_sites_file,
             ms_digest.constant_modifications, ms_digest.variable_modifications,
-            ms_digest.enzyme, 4)
+            ms_digest.enzyme, self.num_procs)
         self.assertTrue(os.path.exists(theo_ions))
         self.theoretical_ion_space_file = theo_ions
-        theoretical_ions = json.load(open(theo_ions))
-        sequence_set = theoretical_ions["theoretical_search_space"]
+        theoretical_ions = SqliteDict(theo_ions, tablename="theoretical_search_space")
+        sequence_set = theoretical_ions.itervalues()
         peptide_sequences = [
             sequence.Sequence(s["Seq_with_mod"]) for s in sequence_set]
         peptide_mods = set()
@@ -97,8 +65,8 @@ class IonMatchingPipeline(unittest.TestCase):
     def test_2_match_ions_step(self):
         print("test_2_match_ions_step")
         matches = entry_point.match_deconvoluted_ions(
-            self.theoretical_ion_space_file, self.ms2_decon_file,
-            self.ms1_match_tolerance, self.ms2_match_tolerance, 4)
+            self.db_file_name, self.ms2_decon_file,
+            self.ms1_match_tolerance, self.ms2_match_tolerance, self.num_procs)
         self.assertTrue(os.path.exists(matches))
         self.ms2_match_file = matches
         print(self.ms2_match_file)
@@ -106,7 +74,7 @@ class IonMatchingPipeline(unittest.TestCase):
     def test_3_postprocess_matches_step(self):
         print("test_3_postprocess_matches_step")
         self.postprocessed_ions_file = entry_point.postprocess_matches(
-            self.ms2_match_file)
+            self.db_file_name)
         self.assertTrue(os.path.exists(self.postprocessed_ions_file))
         print(self.postprocessed_ions_file)
 
@@ -169,6 +137,31 @@ class TestTheoreticalIonSpaceProgram(unittest.TestCase):
         self.assertTrue(all([glycan_identity[i] == self.glycan_identities[i]
                              for i in range(len(self.glycan_identities))]))
 
+sequence_str = "QQQHLFGSNVTDC(Carbamidomethyl)SGNFC(Carbamidomethyl)LFR"
+
+b_ion_fragment_masses = [
+    129.065853575,
+    257.124431115,
+    385.183008655,
+    522.24192053,
+    635.325984545,
+    782.39439849,
+    839.415862225,
+    926.44789066,
+    1040.49081813,
+    1139.55923207,
+    1240.60691058,
+    1355.63385365,
+    1515.66450215,
+    1602.69653058,
+    1659.71799432,
+    1773.76092179,
+    1920.82933573,
+    2080.85998424,
+    2193.94404825,
+    2341.0124622,
+]
+
 
 class TestSequenceFragmentation(unittest.TestCase):
 
@@ -191,6 +184,10 @@ class TestComposition(unittest.TestCase):
     def test_protein_mass(self):
         seq_obj = sequence.Sequence(sequence_str)
         self.assertAlmostEqual(seq_obj.mass, sequence_mass)
+
+sequence_mass = 2514.11686191
+electron_mass = 0.000549
+proton_mass = 1.00727647
 
 if __name__ == '__main__':
     unittest.main()

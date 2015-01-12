@@ -1,6 +1,5 @@
 import json
 from math import fabs
-import re
 from cStringIO import StringIO
 from types import MethodType
 from functools import partial
@@ -8,9 +7,9 @@ from functools import partial
 import pandas as pd
 import numpy as np
 
-from .sequence_handling import get_sequence_length
+from .sequence_handling import get_sequence_length, compute_ion_coverage_map
 from .sequence_handling import modification_signature
-from .sequence_handling import glycosites
+from .sequence_handling import find_occupied_glycosylation_sites
 from .sequence_handling import percent_expected_ions_with_hexnac_observed
 
 from ..structure import sequence
@@ -35,10 +34,10 @@ def deserialize_compound_fields(data_struct):
         try:
             data_struct[field] = pd.Series(map(json.loads, data_struct[field]))
         except TypeError:
-            #print("Deserializing %s failed (TypeError)" % field)
+            print("Deserializing %s failed (TypeError)" % field)
             pass
         except KeyError:
-            #print("Deserializing %s failed (KeyError)" % field)
+            print("Deserializing %s failed (KeyError)" % field)
             pass
         except ValueError, e:
             raise ValueError(str(e) + " " + field)
@@ -96,9 +95,9 @@ def shim_percent_calcs(data):
 # Given the path to a CSV file for a model or target to be classified, parse the
 # CSV into a pandas.DataFrame and make sure it has all of the necessary columns and
 # transformations to either build a model with it or
-def prepare_model_file(path):
+def prepare_model_file(path, recompute=False):
     if path[-4:] == "json":
-        return PredictionResults.deserialize(path)
+        return PredictionResults.deserialize(path, recompute=recompute)
     data = pd.read_csv(path)
     deserialize_compound_fields(data)
     data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
@@ -106,19 +105,22 @@ def prepare_model_file(path):
     data.ix[np.isnan(data.startAA)].startAA = -1
     data.ix[np.isnan(data.endAA)].endAA = -1
     data['abs_ppm_error'] = data.ppm_error.abs()
-    if "peptideLens" not in data:
+    if "peptideLens" not in data or recompute:
         data = get_sequence_length(data)
-    if "numOxIons" not in data:
+    if "numOxIons" not in data or recompute:
         data["numOxIons"] = map(len, data["Oxonium_ions"])
-    if "numStubs" not in data:
+    if "numStubs" not in data or recompute:
         data["numStubs"] = map(len, data["Stub_ions"])
-    if "percent_b_ion_coverage" not in data:
+    if "percent_b_ion_coverage" not in data or recompute:
         shim_percent_calcs(data)
-    data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(
-        glycosites)
-    ion_coverage_score(data)
-    modification_signature(data)
-    infer_glycan_mass(data)
+    if "glycosylation_sites" not in data or recompute:
+        data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(find_occupied_glycosylation_sites)
+    if "meanCoverage" not in data or recompute:
+        ion_coverage_score(data)
+    if "modificationSignature" not in data or recompute:
+        modification_signature(data)
+    if "glycanMass" not in data or recompute:
+        infer_glycan_mass(data)
 
     return data
 
@@ -143,89 +145,14 @@ def ion_coverage_score(data_struct):
     data_struct['peptideCoverageMap'] = coverage_data['peptideCoverageMap']
     data_struct['hexNAcCoverageMap'] = coverage_data['hexNAcCoverageMap']
     data_struct["bIonCoverageMap"] = coverage_data["bIonCoverage"]
-    data_struct["bIonCoverageWithHexNAcMap"] = coverage_data[
-        "bIonCoverageWithHexNAc"]
+    data_struct["bIonCoverageWithHexNAcMap"] = coverage_data["bIonCoverageWithHexNAc"]
     data_struct["yIonCoverageMap"] = coverage_data["yIonCoverage"]
-    data_struct["yIonCoverageWithHexNAcMap"] = coverage_data[
-        "yIonCoverageWithHexNAc"]
+    data_struct["yIonCoverageWithHexNAcMap"] = coverage_data["yIonCoverageWithHexNAc"]
+    data_struct["goldenPairsObserved"] = coverage_data["golden_pairs_observed"]
+    data_struct["goldenPairsHexNAcObserved"] = coverage_data["golden_pairs_hexnac_observed"]
+    data_struct["goldenPairsExpected"] = coverage_data["golden_pairs_expected"]
+    data_struct["goldenPairsHexNAcExpected"] = coverage_data["golden_pairs_hexnac_expected"]
     return data_struct
-
-
-# Maps the coverage along the peptide backbone by matching ions
-# of the correct size to the backbone.
-def compute_ion_coverage_map(row):
-    peptide_length = row['peptideLens']
-    total_coverage = np.zeros(peptide_length)
-    # Could be made more efficient by building by matrix operations
-
-    b_ion_coverage = np.zeros(peptide_length)
-    for b_ion in row['b_ion_coverage']:
-        ion = np.zeros(peptide_length)
-        ion[:int(b_ion['key'].replace("B", '')) - 1] = 1
-        b_ion_coverage += ion
-
-    y_ion_coverage = np.zeros(peptide_length)
-    for y_ion in row['y_ion_coverage']:
-        ion = np.zeros(peptide_length)
-        ion[:int(y_ion['key'].replace("Y", '')) - 1] = 1
-        y_ion_coverage += ion
-
-    b_ions_with_HexNAc = np.zeros(peptide_length)
-    for b_ion in row['b_ions_with_HexNAc']:
-        ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'B(\d+)\+', b_ion['key'])[0]) - 1] = 1
-        b_ions_with_HexNAc += ion
-
-    y_ions_with_HexNAc = np.zeros(peptide_length)
-    for y_ion in row['y_ions_with_HexNAc']:
-        ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0]) - 1] = 1
-        y_ions_with_HexNAc += ion
-
-    total_coverage += b_ion_coverage.astype(
-        np.int32) | b_ions_with_HexNAc.astype(np.int32)
-    total_coverage += y_ion_coverage[
-        ::-1].astype(np.int32) | y_ions_with_HexNAc[::-1].astype(np.int32)  # Reverse
-
-    b_ions_covered = sum((b_ion_coverage.astype(
-        np.int32) | b_ions_with_HexNAc.astype(np.int32)) != 0)
-
-    y_ions_covered = sum((y_ion_coverage[
-        ::-1].astype(np.int32) | y_ions_with_HexNAc[::-1].astype(np.int32)) != 0)
-
-    expected_ions = (peptide_length * 2.0) - 1
-    percent_expected_observed = (
-        b_ions_covered + y_ions_covered) / expected_ions
-
-    percent_uncovered = (sum(total_coverage == 0) / float(peptide_length))
-    mean_coverage = total_coverage.mean() / (float(peptide_length))
-
-    hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1]) / 2.
-
-    mean_hexnac_coverage = percent_expected_ions_with_hexnac_observed(row)
-
-    return pd.Series({"meanCoverage": mean_coverage,
-                      "percentUncovered": percent_uncovered,
-                      "percentExpectedObserved": percent_expected_observed,
-                      "meanHexNAcCoverage": mean_hexnac_coverage,
-                      "peptideCoverageMap": list(total_coverage),
-                      "hexNAcCoverageMap": list(hexnac_coverage),
-                      "bIonCoverage": b_ion_coverage,
-                      "bIonCoverageWithHexNAc": b_ions_with_HexNAc,
-                      "yIonCoverage": y_ion_coverage[::-1],
-                      "yIonCoverageWithHexNAc":  y_ions_with_HexNAc[::-1]
-                      })
-
-
-def build_ion_map(ion_set, ion_type, length):
-    pat = re.compile(r"{0}(\d+)\+?".format(ion_type))
-    coverage = np.zeros(length)
-    for ion in ion_set:
-        inst_cover = np.zeros(length)
-        inst_cover[:int(pat.findall(ion["key"])[0])] = 1
-        coverage += inst_cover
-
-    return coverage
 
 
 # Based upon the assumption that the same MS1 Score + Observed Mass implies
@@ -240,11 +167,10 @@ def determine_ambiguity(data_struct):
     data_struct['ambiguity'] = False
     groupings = data_struct.groupby(["MS1_Score", "Obs_Mass"])
     # Bit list for pandas.DataFrame sort function
-    data_struct["_abs_ppm_error"] = data_struct["ppm_error"].abs()
     sort_direction = [1, 1, 1, 0, 1, 0, 1]
     sort_fields = ["MS2_Score", "numStubs", "meanCoverage",
                    "percentUncovered", "peptideLens",
-                   "_abs_ppm_error", "meanHexNAcCoverage"]
+                   "ppm_error", "meanHexNAcCoverage"]
     if "MS2_Score" not in data_struct:
         sort_direction.pop(0)
         sort_fields.pop(0)
@@ -259,7 +185,6 @@ def determine_ambiguity(data_struct):
         regrouping.append(group)
 
     regroup = pd.concat(regrouping)
-    regroup.drop("_abs_ppm_error", axis=1, inplace=True)
     if wrap is not None:
         wrap.predictions = regroup
         return wrap
@@ -398,6 +323,13 @@ class PredictionResults(object):
                 raise AttributeError(
                     "Prediction Results has no attribute {attr}".format(attr=name))
 
+    # def __setattr__(self, name, value):
+    #     try:
+    #         object.__getattribute__(self, name)
+    #         object.__setattr__(self, name, value)
+    #     except:
+    #         self[name] = value
+
     def __repr__(self):
         rep = "<PredictionResults>\n{frame}".format(frame=repr(self.predictions))
         return rep
@@ -436,17 +368,20 @@ class PredictionResults(object):
     def fdr(self):
         return self.metadata.get("fdr", None)
 
+    def fragments(self):
+        return self.b_ions_with_HexNAc + self.y_ions_with_HexNAc + self.b_ion_coverage + self.y_ion_coverage
+
     def _framewrapper_fn(self, attr, *args, **kwargs):
         out = getattr(self.predictions, attr)(*args, **kwargs)
         if isinstance(out, pd.DataFrame):
             out = PredictionResults(self.metadata, out)
         return out
 
-    def score_naive(self, peptide_weight=0.5, hexnac_weight=0.5):
+    def score_naive(self, peptide_weight=0.5, hexnac_weight=0.5, uncovered_penalty_weight=1.0):
         if (peptide_weight + hexnac_weight) != 1.0:
             raise ValueError("Peptide and HexNAc Weights must sum to 1.0")
         return (self.meanCoverage * peptide_weight) + (self.meanHexNAcCoverage * hexnac_weight) \
-            - (self.percentUncovered)
+            - (uncovered_penalty_weight * self.percentUncovered)
 
     def optimize_fdr(self):
         if "fdr" not in self.metadata:
@@ -454,7 +389,7 @@ class PredictionResults(object):
         fdr = self.metadata.get("fdr")
         return fdr.ix[fdr.query("false_discovery_rate <= 0.05").num_real_matches.idxmax()]
 
-    def serialize(self, target_buffer=None):
+    def serialize(self, target_buffer=None, close=True):
         if target_buffer is None:
             target_buffer = StringIO()
         if isinstance(target_buffer, basestring):
@@ -471,18 +406,20 @@ class PredictionResults(object):
 
         for chunk in encoder.iterencode(serialize_data):
             target_buffer.write(chunk)
-        return target_buffer
+        if close:
+            target_buffer.close()
+        return
 
     @classmethod
-    def deserialize(cls, data_buffer):
+    def deserialize(cls, data_buffer, recompute=False):
         if isinstance(data_buffer, basestring):
             data_buffer = open(data_buffer, "rb")
         loose_data = json.load(data_buffer)
         metadata = loose_data["metadata"]
-        if "fdr" in metadata:
-            metadata["fdr"] = pd.DataFrame(metadata["fdr"])
+        # if "fdr" in metadata:
+        #     metadata["fdr"] = pd.DataFrame(metadata["fdr"])
         predictions = loose_data["predictions"]
-        predictions = cls.ensure_fields(predictions)
+        predictions = cls.ensure_fields(predictions, recompute=recompute)
         instance = cls(metadata, predictions)
 
         for plugin in PredictionResults.plugins:
@@ -498,7 +435,7 @@ class PredictionResults(object):
         return prediction_frame
 
     @staticmethod
-    def ensure_fields(raw_predictions):
+    def ensure_fields(raw_predictions, recompute=False):
         data = pd.DataFrame(raw_predictions)
         data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
         # Handle Decoys
@@ -513,34 +450,63 @@ class PredictionResults(object):
             data.ix[np.isnan(data.endAA)].endAA = -1
         except TypeError:
             data.endAA = -1
-        if "bad_oxonium_ions" not in data:
+        if "bad_oxonium_ions" not in data or recompute:
             data["bad_oxonium_ions"] = data.Oxonium_ions.apply(lambda x: [])
-        if "peptideLens" not in data:
+        if "peptideLens" not in data or recompute:
             data = get_sequence_length(data)
-        if "numOxIons" not in data:
+        if "numOxIons" not in data or recompute:
             data["numOxIons"] = map(len, data["Oxonium_ions"])
-        if "numStubs" not in data:
+        if "numStubs" not in data or recompute:
             data["numStubs"] = map(len, data["Stub_ions"])
-        if "percent_b_ion_coverage" not in data:
+        if "percent_b_ion_coverage" not in data or recompute:
             shim_percent_calcs(data)
-        data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(
-            glycosites)
-        ion_coverage_score(data)
-        modification_signature(data)
-        infer_glycan_mass(data)
+        if "glycosylation_sites" not in data or recompute:
+            data["glycosylation_sites"] = data.Glycopeptide_identifier.apply(find_occupied_glycosylation_sites)
+        if "meanCoverage" not in data or recompute:
+            ion_coverage_score(data)
+        if "modificationSignature" not in data or recompute:
+            modification_signature(data)
+        if "glycanMass" not in data or recompute:
+            infer_glycan_mass(data)
         return data
 
 
 class PredictionResultsPlugin(object):
-    def __init__(self, *args, **kwargs):
-        pass
 
+    @classmethod
     def serialize(self, instance, json_dict):
         pass
 
+    @classmethod
     def deserialize(self, instance, json_dict):
         pass
 
+
+class PredictionResultsPluginFDRPlugin(PredictionResultsPlugin):
+
+    @classmethod
+    def deserialize(self, instance, json_dict):
+        if "fdr" in instance.metadata:
+            instance.metadata["fdr"] = pd.DataFrame(instance.metadata["fdr"])
+    # Does not need deserialize method, PredictionResultsJSONEncoder handles it
+    # implicitly.
+PredictionResults.plugins.append(PredictionResultsPluginFDRPlugin)
+
+
+class PredictionResultsIntactMassNoFragmentsPlugin(PredictionResultsPlugin):
+
+    @classmethod
+    def deserialize(self, instance, json_dict):
+        if "intact_mass_no_fragments" in json_dict:
+            instance.intact_mass_no_fragments = json_dict["intact_mass_no_fragments"]
+
+    @classmethod
+    def serialize(self, instance, json_dict):
+        try:
+            json_dict["intact_mass_no_fragments"] = instance.intact_mass_no_fragments
+        except:
+            json_dict["intact_mass_no_fragments"] = []
+PredictionResults.plugins.append(PredictionResultsIntactMassNoFragmentsPlugin)
 
 
 def convert_csv_to_nested(path):

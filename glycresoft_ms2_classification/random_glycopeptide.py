@@ -43,7 +43,7 @@ def generate_component_set(constant_modifications, variable_modifications):
     const_modified = set()
     for mod in constant_modifications:
         for symbol, name in residue_symbols.items():
-            if mod.valid_site(name):
+            if mod.valid_site(name, "internal"):
                 components.add(symbol + "(" + mod.serialize() + ")")
                 const_modified.add(symbol)
 

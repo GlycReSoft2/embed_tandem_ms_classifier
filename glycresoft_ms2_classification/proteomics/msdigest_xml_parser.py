@@ -2,7 +2,7 @@ try:
     import urllib2 as url_parser  # python 2
 except ImportError:
     import urllib.parse as url_parser  # python 3
-from xml .etree import cElementTree as ET
+from glycresoft_ms2_classification.utils.xml_utils import ET
 import json
 
 

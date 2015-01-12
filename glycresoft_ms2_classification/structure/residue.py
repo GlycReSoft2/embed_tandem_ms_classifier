@@ -94,3 +94,13 @@ class Residue(ResidueBase):
 
     def __hash__(self):
         return hash(str(self))
+
+    def __eq__(self, other):
+        if isinstance(other, Residue):
+            other = other.name
+        return self.name == other
+
+    def __ne__(self, other):
+        if isinstance(other, Residue):
+            other = other.name
+        return self.name != other

@@ -67,7 +67,7 @@ modifications:{modifications}""".format(seq2=self.seq.get_sequence(), **self.__d
                 temp_seq = copy.deepcopy(raw_sequence)
                 for site in sites:
                     gly_mod = Modification(ModificationTable.other_modifications["HexNAc"], site, 1)
-                    temp_seq.append_modification(gly_mod)
+                    temp_seq.add_modification(mod_type=gly_mod)
                 seq_space.append(temp_seq)
 
         return seq_space

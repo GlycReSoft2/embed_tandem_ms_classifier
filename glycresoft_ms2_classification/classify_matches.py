@@ -10,7 +10,7 @@ from .prediction_tools import model_definitions
 from .prediction_tools import generate_confusion_matrix
 from .prediction_tools import classify_with_model, generate_null_model
 from .prediction_tools import PredictionResults
-from utils import try_deserialize, try_get_outfile
+from .utils import try_deserialize, try_get_outfile
 
 
 class ModelTask(object):
@@ -56,7 +56,6 @@ class PrepareModelTask(ModelTask):
 
     def save_model(self):
         out = save_model_file(self.model_frame, self.output_path)
-        print(out)
         self.output_path = out
 
     def run(self):

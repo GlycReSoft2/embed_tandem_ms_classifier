@@ -4,8 +4,12 @@ import re
 import json
 import multiprocessing
 import logging
+logger = logging.getLogger("theoretical_search_space_builder")
+
 import functools
 import itertools
+
+from sqlitedict import SqliteDict
 
 from structure.modification import RestrictedModificationTable
 from structure.modification import ModificationTable
@@ -50,6 +54,7 @@ def get_glycan_identities(colnames):
             break
         elif extract_state:
             glycan_identity.append(col.replace("G:", ""))
+    logger.info("Glycan identities found: %s", glycan_identity)
     return glycan_identity
 
 
@@ -57,7 +62,8 @@ def generate_fragments(
     seq, num_sites=0, glycan_comp=None, pep_mod=None, seq_str="", theo_mass=0., mass_error=0.,
         score=0, precur_mass=0, volume=0, start_pos=-1, end_pos=-1):
     seq_mod = seq.get_sequence()
-    b_type = seq.get_fragments('B')
+    fragments = zip(*map(seq.break_at, range(1, len(seq))))
+    b_type = fragments[0]  # seq.get_fragments('B')
     b_ions = []
     b_ions_HexNAc = []
     for b in b_type:
@@ -68,22 +74,24 @@ def generate_fragments(
                 # so do not include them in the output
                 continue
             mass = fm.get_mass()
+            golden_pairs = fm.golden_pairs
             if "HexNAc" in key:
-                b_ions_HexNAc.append({"key": key, "mass": mass})
+                b_ions_HexNAc.append({"key": key, "mass": mass, "golden_pairs": golden_pairs})
             else:
-                b_ions.append({"key": key, "mass": mass})
+                b_ions.append({"key": key, "mass": mass, "golden_pairs": golden_pairs})
 
-    y_type = seq.get_fragments('Y')
+    y_type = fragments[1]  # seq.get_fragments('Y')
     y_ions = []
     y_ions_HexNAc = []
     for y in y_type:
         for fm in y:
             key = fm.get_fragment_name()
             mass = fm.get_mass()
+            golden_pairs = fm.golden_pairs
             if "HexNAc" in key:
-                y_ions_HexNAc.append({"key": key, "mass": mass})
+                y_ions_HexNAc.append({"key": key, "mass": mass, "golden_pairs": golden_pairs})
             else:
-                y_ions.append({"key": key, "mass": mass})
+                y_ions.append({"key": key, "mass": mass, "golden_pairs": golden_pairs})
 
     pep_stubs = StubGlycopeptide(seq_str, pep_mod, num_sites, glycan_comp)
     stub_ions = pep_stubs.get_stubs()
@@ -142,10 +150,9 @@ def process_predicted_ms1_ion(row, modification_table, site_list, glycan_identit
 def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None,
          enzyme_info=None, n_processes=4, output_file=None):
     if output_file is None:
-        output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
-    modification_table = RestrictedModificationTable.bootstrap(
-        constant_modification_list, variable_modification_list)
-
+        #output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
+        output_file = os.path.splitext(result_file)[0] + ".db"
+    modification_table = RestrictedModificationTable.bootstrap(constant_modification_list, variable_modification_list)
     if constant_modification_list is None and variable_modification_list is None:
         modification_table = ModificationTable.bootstrap()
 
@@ -170,29 +177,51 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
         "enable_partial_hexnac_match": constants.PARTIAL_HEXNAC_LOSS
     }
 
-    print(constants.PARTIAL_HEXNAC_LOSS)
+    metadata_store = SqliteDict(output_file, tablename="metadata")
+    metadata_store.update(metadata)
+    metadata_store.commit()
 
-    fragment_info = []
+    #fragment_info = []
+    theoretical_search_space_store = SqliteDict(output_file, tablename="theoretical_search_space")
     pool = multiprocessing.Pool(n_processes)
 
     task_fn = functools.partial(process_predicted_ms1_ion, modification_table=modification_table,
                                 site_list=site_list, glycan_identity=glycan_identity)
 
-    fragment_info = list(
-        itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000)))
-
-    if output_file is not False:
-        print("Writing to file")
-        fh = open(output_file + '.json', 'wb')
-        data = {
-            "metadata": metadata,
-            "theoretical_search_space": fragment_info
-        }
-        json.dump(data, fh)
-        fh.close()
+    cntr = 0
+    if n_processes > 1:
+        logger.debug("Building theoretical sequences concurrently")
+        #fragment_info = list(itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000)))
+        for res in (itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000))):
+            theoretical_search_space_store[cntr] = res
+            cntr += 1
+    else:
+        logger.debug("Building theoretical sequences sequentially")
+        for row in compo_dict:
+            res = task_fn(row)
+            #fragment_info.extend(res)
+            for item in res:
+                theoretical_search_space_store[cntr] = res
+                cntr += 1
+                if (cntr % 10000) == 0:
+                    theoretical_search_space_store.commit()
+                    logger.info("Committing, %d records made", cntr)
+    theoretical_search_space_store.commit()
+    theoretical_search_space_store.close()
     pool.close()
     pool.join()
-    return output_file + '.json', data
+    logger.info("Hypothesis building complete")
+    # if output_file is not False:
+    #     logger.info("Writing sequences to file: %s", output_file)
+    #     fh = open(output_file + '.json', 'wb')
+    #     data = {
+    #         "metadata": metadata,
+    #         "theoretical_search_space": fragment_info
+    #     }
+    #     json.dump(data, fh)
+    #     fh.close()
+
+    return output_file
 
 
 def taskmain():

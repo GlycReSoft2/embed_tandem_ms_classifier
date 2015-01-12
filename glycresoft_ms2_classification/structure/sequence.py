@@ -5,120 +5,17 @@ import itertools
 
 from collections import defaultdict, deque
 
-from . import PeptideSequenceBase
+from . import PeptideSequenceBase, MoleculeBase
 from . import constants as structure_constants
-from .composition import Composition
-from .fragment import Fragment
+from .composition import Composition, composition_to_mass
+from .fragment import Fragment, fragment_pairing, fragment_direction
 from .modification import Modification
 from .residue import Residue
+
+from .parser import *
+
+from ..utils.iterators import peekable
 from ..utils.memoize import memoize
-
-
-# sequence must be a string and not unicode
-@memoize(20000)
-def sequence_tokenizer(sequence):
-    state = "aa"
-    mods = []
-    chunks = []
-    glycan = ""
-    current_aa = ""
-    current_mod = ""
-    current_mods = []
-    paren_level = 0
-    i = 0
-    while i < len(sequence):
-        next_char = sequence[i]
-        if next_char == "(":
-            if state == "aa":
-                state = "mod"
-                assert paren_level == 0
-                paren_level += 1
-            elif state == "mod":
-                paren_level += 1
-                current_mod += next_char
-        elif next_char == ")":
-            if state == "aa":
-                raise Exception(
-                    "Invalid Sequence. ) found outside of modification, Position {0}. {1}".format(i, sequence))
-            elif state == "mod":
-                paren_level -= 1
-                if paren_level == 0:
-                    state = 'aa'
-                    mods.extend(current_mods)
-                    current_mods.append(current_mod)
-                    chunks.append([current_aa, current_mods])
-                    current_mods = []
-                    current_mod = ""
-                    current_aa = ""
-                else:
-                    current_mod += next_char
-        elif next_char == "|":
-            if state == "aa":
-                raise Exception(
-                    "Invalid Sequence. | found outside of modification")
-            else:
-                current_mods.append(current_mod)
-                current_mod = ""
-        elif next_char == "[" and state == 'aa':
-            glycan = sequence[i:]
-            break
-        elif state == "aa":
-            if(current_aa != ""):
-                current_mods.append(current_mod)
-                chunks.append([current_aa, current_mods])
-                current_mod = ""
-                current_mods = []
-                current_aa = ""
-            current_aa += next_char
-        elif state == "mod":
-            current_mod += next_char
-        else:
-            raise Exception(
-                "Unknown Tokenizer State", current_aa, current_mod, i, next_char)
-        i += 1
-    if current_aa != "":
-        chunks.append([current_aa, current_mod])
-    if current_mod != "":
-        mods.append(current_mod)
-
-    return chunks, mods, glycan
-
-
-def sequence_length(sequence):
-    sequence, modifications, glycan = sequence_tokenizer(sequence)
-    return len(sequence)
-
-
-def strip_modifications(sequence):
-    chunks, modifications, glycan = sequence_tokenizer(sequence)
-    return ''.join([residue for residue, mod in chunks])
-
-
-@memoize(20000)
-def sequence_to_mass(sequence):
-    '''Fast and un-apologetic or -validating sequence to mass'''
-    mass = 0.0
-    chunks, modifications, glycan = sequence_tokenizer(sequence)
-    for residue, mod in chunks:
-        mass += Residue.mass_by_name(residue)
-        mass += Modification.mass_by_name(mod)
-    mass += Composition("H2O").mass
-    return mass
-
-
-def sequence_tokenizer_respect_sequons(sequence):
-    chunks, modifications, glycan = sequence_tokenizer(sequence)
-    positions = []
-    i = 0
-    sequence_length = len(chunks)
-    while(i < sequence_length):
-        cur_pos = chunks[i]
-        if cur_pos[0] == "N" and "HexNAc" in cur_pos[1]:
-            positions.append(chunks[i:(i + 3)])
-        else:
-            positions.append(cur_pos)
-        i += 1
-    return positions
 
 
 def list_to_sequence(seq_list, wrap=True):
@@ -128,16 +25,82 @@ def list_to_sequence(seq_list, wrap=True):
             flat_chunks.extend(chunk)
         else:
             flat_chunks.append(chunk)
-    seq = Sequence.from_iterable(flat_chunks)
+    seq = Sequence.from_iterable(flat_chunks) if wrap else flat_chunks
     return seq
 
 
-def find_n_glycosylation_sequons(sequence_string):
-    n_s_matches = re.finditer(r"N[^\(P]S", sequence_string)
-    n_t_matches = re.finditer(r"N[^\(P]T", sequence_string)
-    matches = itertools.chain(n_s_matches, n_t_matches)
-    sites = [m.start() for m in matches]
-    return sites
+@memoize()
+def sequence_to_mass(sequence):
+    mass = 0.0
+    chunks, modifications, glycan, n_term, c_term = sequence_tokenizer(sequence)
+    for residue, mods in chunks:
+        mass += Residue.mass_by_name(residue)
+        for mod in mods:
+            mass += Modification.mass_by_name(mod)
+    if n_term is not None:
+        mass += Modification.mass_by_name(n_term)
+    else:
+        mass += Composition("H").mass
+    if c_term is not None:
+        mass += Modification.mass_by_name(c_term)
+    else:
+        mass += Composition("OH").mass
+    return mass
+
+
+def find_n_glycosylation_sequons(sequence, allow_modified=False):
+    state = "seek"  # [seek, n, ^p, st]
+    if(isinstance(sequence, Sequence)):
+        asn = "Asn"
+        pro = "Pro"
+        ser = "Ser"
+        thr = "Thr"
+    else:
+        sequence, mods, glycan, n_term, c_term = sequence_tokenizer(sequence)
+        asn = "N"
+        pro = "P"
+        ser = "S"
+        thr = "T"
+    i = 0
+    positions = []
+    n_pos = None
+    while(i < len(sequence)):
+        next_pos = sequence[i]
+        if state == "seek":
+            # A sequon starts with an Asn residue without modifications, or for counting
+            # purposes one that has already been glycosylated
+            if next_pos[0] == asn and ((len(next_pos[1]) == 0 or allow_modified) or "HexNAc" in next_pos):
+                n_pos = i
+                state = "n"
+        elif state == "n":
+            if next_pos[0] != pro:
+                state = "^p"
+            else:
+                state = "seek"
+                i = n_pos
+                n_pos = None
+        elif state == "^p":
+            if next_pos[0] in {ser, thr}:
+                positions.append(n_pos)
+            i = n_pos
+            n_pos = None
+            state = "seek"
+        i += 1
+    return positions
+
+
+def golden_pair_map(sequence):
+    seq_obj = Sequence(sequence)
+    key_to_golden_pairs = {}
+    fragments = map(seq_obj.break_at, range(1, len(seq_obj)))
+    for pair in fragments:
+        for frag in pair:
+            if isinstance(frag, list):
+                for item in frag:
+                    key_to_golden_pairs[item.name] = item.golden_pairs
+            else:
+                key_to_golden_pairs[frag.name] = frag.golden_pairs
+    return key_to_golden_pairs
 
 
 class Sequence(PeptideSequenceBase):
@@ -148,7 +111,20 @@ class Sequence(PeptideSequenceBase):
     @classmethod
     def from_iterable(cls, iterable):
         seq = cls("")
-        for resid, mods in iterable:
+        n_term = structure_constants.N_TERM_DEFAULT
+        c_term = structure_constants.C_TERM_DEFAULT
+        i = 0
+        for pos, next_pos in peekable(iterable):
+            i += 1
+            try:
+                resid, mods = pos
+            except ValueError:
+                if i == 0:
+                    n_term = pos
+                elif next_pos == StopIteration:
+                    c_term = pos
+                else:
+                    raise
             if not isinstance(resid, Residue):
                 resid = Residue(symbol=resid)
             seq.mass += resid.mass
@@ -163,42 +139,100 @@ class Sequence(PeptideSequenceBase):
                 seq.mod_index[mod.name] += 1
             seq.seq.append([resid, mod_list])
         seq.mass += Composition("H2O").mass
+        if not isinstance(n_term, MoleculeBase):
+            n_term = Modification(n_term)
+        if not isinstance(c_term, MoleculeBase):
+            c_term = Modification(c_term)
 
+        seq.n_term = n_term
+        seq.c_term = c_term
         return seq
 
-    def __init__(self, sequence):
-        seq_list, modifications, glycan = sequence_tokenizer(sequence)
+    def __init__(self, sequence, **kwargs):
+        seq_list, modifications, glycan, n_term, c_term = sequence_tokenizer(sequence)
         self.mass = 0.0
         self.seq = []
         self.mod_index = defaultdict(int)
         for item in seq_list:
-            res = Residue()
-            res.by_symbol(item[0])
-            self.mass += res.mass
-            mods = []
-            for mod in item[1]:
-                if mod != '':
-                    try:
+            try:
+                res = Residue()
+                res.by_symbol(item[0])
+                self.mass += res.mass
+                mods = []
+                for mod in item[1]:
+                    if mod != '':
                         mod = Modification(mod)
                         mods.append(mod)
                         self.mod_index[mod.name] += 1
                         self.mass += mod.mass
-                    except Exception, e:
-                        raise e
-            self.seq.append([res, mods])
-
-        # Environment
-        self.mass += Composition("H2O").mass
+                self.seq.append([res, mods])
+            except:
+                print(sequence)
+                print(item)
+                raise
+        # Termini
+        # self.mass += Composition("H2O").mass
 
         # For compatibility with Glycopeptide sequences
         self.glycan = glycan
 
+        # For compatibility with terminal modifications
+        self._n_term = None
+        self._c_term = None
+
+        self.n_term = Modification(n_term) if isinstance(n_term, basestring) else n_term
+        self.c_term = Modification(c_term) if isinstance(c_term, basestring) else c_term
+
     def __repr__(self):
-        rep = "{seq}[{mass}]".format(**self.__dict__)
+        n_term = ""
+        if self.n_term is not None:
+            n_term = "({0})-".format(self.n_term)
+        c_term = ""
+        if self.c_term is not None:
+            c_term = "-({0})".format(self.c_term)
+        rep = "{n_term}{seq}{c_term}{glycan}[{mass}]".format(n_term=n_term, c_term=c_term, **self.__dict__)
         return rep
 
     def __len__(self):
         return self.length
+
+    @property
+    def n_term(self):
+        return self._n_term
+
+    @n_term.setter
+    def n_term(self, value):
+        reset_mass = 0
+        try:
+            reset_mass = self._n_term.mass
+        except:
+            pass
+        self._n_term = value
+        new_mass = 0
+        try:
+            new_mass = value.mass
+        except:
+            pass
+        self.mass += new_mass - reset_mass
+
+    @property
+    def c_term(self):
+        return self._c_term
+
+    @c_term.setter
+    def c_term(self, value):
+        reset_mass = 0
+        try:
+            reset_mass = self._c_term.mass
+        except:
+            pass
+        self._c_term = value
+        new_mass = 0
+        try:
+            new_mass = value.mass
+        except:
+            pass
+        self.mass += new_mass - reset_mass
 
     @property
     def length(self):
@@ -222,12 +256,40 @@ class Sequence(PeptideSequenceBase):
         try to validate the result.'''
         self.seq[index] = value
 
-    def subseq(self, slice):
-        sub = self[slice]
-        return Sequence.from_iterable(sub)
+    def subseq(self, slice_obj):
+        sub = self[slice_obj]
+        subseq = Sequence.from_iterable(sub)
+        subseq.n_term = self.n_term
+        return subseq
 
     def __hash__(self):
         return hash(str(self))
+
+    def break_golden_pair(self, frag):
+        if isinstance(frag, Fragment):
+            kind = frag.type
+            pos = frag.pos
+        else:
+            frag = Fragment.parse(frag)
+            kind = frag['kind']
+            pos = int(frag['position'])
+        length = len(self)
+        golden_pair_pos = length - pos
+        golden_pair_kind = fragment_pairing[kind]
+        golden_pair_direction = fragment_direction[golden_pair_kind]
+
+        mod_dict = defaultdict(int)
+        if fragment_direction[kind] > 0:
+            walk_path = range(pos, length)
+        else:
+            walk_path = range(golden_pair_pos - 1, 0, -1)
+        for i in walk_path:
+            for mod in self[i][1]:
+                mod_dict[mod.name] += 1
+
+        modification_block = Fragment.modification_name_block(mod_dict)
+        golden_pair_name = "{golden_pair_kind}{golden_pair_pos}{modification_block}".format(**locals())
+        return golden_pair_name
 
     def break_at(self, idx):
         b_shift = Composition('H').mass - Composition('e').mass
@@ -259,11 +321,19 @@ class Sequence(PeptideSequenceBase):
 
         y_frag = Fragment(
             "Y", len(self) - (break_point - 1 + structure_constants.FRAG_OFFSET), mod_y, mass_y + y_shift)
+        if structure_constants.PARTIAL_HEXNAC_LOSS:
+            b_frag.golden_pairs = [frag.name for frag in y_frag.partial_loss()]
+            y_frag.golden_pairs = [frag.name for frag in b_frag.partial_loss()]
+            b_frag = list(b_frag.partial_loss())
+            y_frag = list(y_frag.partial_loss())
+        else:
+            b_frag.golden_pairs = [y_frag.name]
+            y_frag.golden_pairs = [b_frag.name]
 
-        return b_frag, y_frag, "".join(residues_in_b), "".join(residues_in_y)
+        return b_frag, y_frag
 
-    def get_fragments(self, kind):
-        """ Return a list of mass values"""
+    def get_fragments(self, kind, include_golden_pairs=True):
+        """Return a list of mass values for each fragment of `kind`"""
 
         mass_shift = 0.0
 
@@ -272,30 +342,26 @@ class Sequence(PeptideSequenceBase):
 
         # The key is the position, the value is an array of fragments.
         # And the first element is always bare fragment.
-        # The total number of HexNAc on the fragment should be recorded.\
+        # The total number of HexNAc on the fragment should be recorded.
 
         if kind == 'B' or kind == "b":
             seq_list = self.seq
-
-            mass_shift = Composition('H').mass - Composition('e').mass
+            # Hydrogen ionized is from terminal modification
+            mass_shift = composition_to_mass('H') - composition_to_mass('e')
 
         elif kind == 'Y' or kind == "y":
-            mass_shift = Composition('H2O').mass + Composition(
-                'H').mass - Composition('e').mass
+            # y ions abstract a proton from the precursor
+            mass_shift = composition_to_mass('H2O') + composition_to_mass('H') - composition_to_mass('e')
             seq_list = list(reversed(self.seq))
 
         current_mass = 0
-        hn_num = 0
         for idx in range(len(seq_list) - 1):
             for mod in seq_list[idx][1]:
-                # HexNAc is treated differently.
-                if mod.name == 'HexNAc' and structure_constants.PARTIAL_HEXNAC_LOSS:
-                    hn_num += 1
-                    continue
-                if mod.serialize() in mod_dict:
-                    mod_dict[mod.serialize()] += 1
+                mod_serial = mod.serialize()
+                if mod_serial in mod_dict:
+                    mod_dict[mod_serial] += 1
                 else:
-                    mod_dict[mod.serialize()] = 1
+                    mod_dict[mod_serial] = 1
 
             if idx == 0:
                 current_mass = seq_list[0][0].mass + mass_shift
@@ -303,6 +369,7 @@ class Sequence(PeptideSequenceBase):
                 current_mass = current_mass + seq_list[idx][0].mass
 
             frag_dri = []
+            # If incremental loss of HexNAc is not allowed, only one fragment of a given type is generated
             if not structure_constants.PARTIAL_HEXNAC_LOSS:
                 frag = Fragment(kind, idx + structure_constants.FRAG_OFFSET, copy.copy(mod_dict), current_mass)
                 frag_dri.append(frag)
@@ -310,13 +377,16 @@ class Sequence(PeptideSequenceBase):
                 bare_dict["HexNAc"] = 0
                 frag = Fragment(kind, idx + structure_constants.FRAG_OFFSET, copy.copy(bare_dict), current_mass)
                 frag_dri.append(frag)
+            # Else a fragment for each incremental loss of HexNAc must be generated
             else:
-                for num in range(0, hn_num + 1):
-                    new_dict = copy.copy(mod_dict)
-                    if num != 0:
-                        new_dict['HexNAc'] = num
-                    frag = Fragment(kind, idx + structure_constants.FRAG_OFFSET, new_dict, current_mass)
-                    frag_dri.append(frag)
+                frag = Fragment(kind, idx + structure_constants.FRAG_OFFSET, copy.copy(mod_dict), current_mass)
+                frag_dri.extend(frag.partial_loss())
+                # for num in range(0, hn_num + 1):
+                #     new_dict = copy.copy(mod_dict)
+                #     if num != 0:
+                #         new_dict['HexNAc'] = num
+                #     frag = Fragment(kind, idx + structure_constants.FRAG_OFFSET, new_dict, current_mass)
+                #     frag_dri.append(frag)
             yield frag_dri
 
     def drop_modification(self, pos, mod_type):
@@ -333,13 +403,15 @@ class Sequence(PeptideSequenceBase):
             self.mass -= drop_mod.mass
             self.mod_index[drop_mod.name] -= 1
         except:
-            raise Exception("Modification not found! %s @ %s" %
-                            (mod_type, pos))
+            raise ValueError("Modification not found! %s @ %s" % (mod_type, pos))
 
-    def add_modification(self, pos, mod_type):
+    def add_modification(self, pos=None, mod_type=None):
+        if pos is None and isinstance(mod_type, Modification):
+            pos = mod_type.position
+
         if (pos == -1) or (pos >= len(self.seq)):
-            warnings.warn("Invalid modification! Negative Pos: %s Exceeded Length: %s" %
-                          ((pos == -1), pos >= len(self.seq)))
+            warnings.warn("Invalid modification! Negative Pos: %s Exceeded Length: %s, %r" %
+                         ((pos == -1), (pos >= len(self.seq)), mod_type))
             return -1
         if isinstance(mod_type, Modification):
             mod = mod_type
@@ -349,23 +421,17 @@ class Sequence(PeptideSequenceBase):
         self.mass += mod.mass
         self.mod_index[mod.name] += 1
 
-    def append_modification(self, mod):
-        if mod.position == -1 | mod.position >= len(self.seq):
-            warnings.warn("Invalid modification!")
-            return
-
-        pos = mod.position
-        self.seq[pos][1].append(mod)
-        self.mass += mod.mass
-        self.mod_index[mod.name] += 1
-
-    def get_sequence(self, start=0):
+    def get_sequence(self, start=0, include_glycan=True, include_termini=True,
+                     implicit_n_term=None, implicit_c_term=None):
         """
-           Generate user readable sequence string.
+           Generate human readable sequence string.
            DQYELLC(Carbamidomethyl)LDN(HexNAc)TR
         """
+        if implicit_n_term is None:
+            implicit_n_term = structure_constants.N_TERM_DEFAULT
+        if implicit_c_term is None:
+            implicit_c_term = structure_constants.C_TERM_DEFAULT
 
-        #seq_str = ''.join([''.join([x.symbol, '(', '|'.join(i.name for i in y), ')']) for x, y in self.seq])
         seq_list = []
         for x, y in self.seq[start:]:
             mod_str = ''
@@ -373,7 +439,17 @@ class Sequence(PeptideSequenceBase):
                 mod_str = '|'.join(mod.serialize() for mod in y)
                 mod_str = ''.join(['(', mod_str, ')'])
             seq_list.append(''.join([x.symbol, mod_str]))
-        return ''.join(seq_list) + self.glycan
+        rep = ''.join(seq_list)
+        if include_termini:
+            n_term = ""
+            if self.n_term is not None and self.n_term != implicit_n_term:
+                n_term = "({0})-".format(self.n_term.serialize())
+            c_term = ""
+            if self.c_term is not None and self.c_term != implicit_c_term:
+                c_term = "-({0})".format(self.c_term.serialize())
+            rep = "{0}{1}{2}".format(n_term, rep, c_term)
+        rep += self.glycan if include_glycan else ""
+        return rep
 
     __str__ = get_sequence
 
@@ -398,7 +474,7 @@ class Sequence(PeptideSequenceBase):
         if not isinstance(sequence, PeptideSequenceBase):
             sequence = Sequence(sequence)
         self.seq.extend(sequence.seq)
-        self.mass += sequence.mass - Composition("H2O").mass
+        self.mass += sequence.mass - sequence.n_term.mass - sequence.c_term.mass
         for mod, count in sequence.mod_index.items():
             self.mod_index[mod] += count
 
@@ -406,13 +482,13 @@ class Sequence(PeptideSequenceBase):
         if not isinstance(sequence, PeptideSequenceBase):
             sequence = Sequence(sequence)
         self.seq = sequence.seq + self.seq
-        self.mass += sequence.mass
+        self.mass += sequence.mass - sequence.n_term.mass - sequence.c_term.mass
         for mod, count in sequence.mod_index.items():
             self.mod_index[mod] += count
 
     @property
     def n_glycan_sequon_sites(self):
-        return find_n_glycosylation_sequons(str(self))
+        return find_n_glycosylation_sequons(self, structure_constants.ALLOW_MODIFIED_ASPARAGINE)
 
 
 class GrowingSequence(Sequence):
@@ -449,7 +525,6 @@ class Protease(object):
                     mods in sequence[1:]])
         cnt += sum([resid.symbol in self.suffix for resid,
                     mods in sequence[:-1]])
-
         return cnt
 
     def pad(self, sequence):
@@ -463,6 +538,8 @@ def cleave(sequence, rule, missed_cleavages=0, min_length=0, **kwargs):
     of a peptide sequence by a regex rule. Includes the cut indices, not included in
     pyteomics.'''
     peptides = []
+    if isinstance(sequence, Sequence):
+        sequence = str(sequence)
     cleavage_sites = deque([0], maxlen=missed_cleavages+2)
     for i in itertools.chain(map(lambda x: x.end(), re.finditer(rule, sequence)), [None]):
         cleavage_sites.append(i)

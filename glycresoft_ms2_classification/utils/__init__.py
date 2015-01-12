@@ -1,6 +1,7 @@
 import json
 import os
 
+
 splitext = os.path.splitext
 
 __all__ = ["memoize", "try_deserialize", "try_get_outfile", "collectiontools"]

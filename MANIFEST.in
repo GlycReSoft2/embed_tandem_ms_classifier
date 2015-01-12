@@ -1,1 +1,2 @@
 recursive-include glycresoft_ms2_classification/structure/data *.csv
+recursive-include glycresoft_ms2_classification/structure/data *.json

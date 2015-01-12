@@ -94,3 +94,8 @@ class ClassificationException(GlycReSoftInterprocessCommunicationException):
 class ImportErrorWrapperException(GlycReSoftInterprocessCommunicationException):
     __metaclass__ = ErrorCodingMeta
     pass
+
+
+class MemoryErrorWrapperException(GlycReSoftInterprocessCommunicationException):
+    __metaclass__ = ErrorCodingMeta
+    pass

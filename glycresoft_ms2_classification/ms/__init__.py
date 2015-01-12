@@ -1,0 +1,102 @@
+import os
+import re
+import urllib2
+import json
+import logging
+decon_io_logger = logging.getLogger("DeconIO")
+try:
+    import cPickle as pickle
+except:
+    import pickle
+import gzip
+from collections import Iterable
+
+from .spectra import (neutral_mass, mass_charge_ratio,
+                      ObservedPrecursorSpectrum,
+                      ObservedTandemSpectrum, MSMSSqlDB)
+from .constants import constants
+
+
+opener = open
+compressed_opener = gzip.open
+urlopen = urllib2.urlopen
+
+opener_map = {
+    "gz": compressed_opener,
+    "": opener
+}
+
+
+def get_opener(file_name=""):
+    if re.search(r"(^file:/)|(^https?://)", file_name) is not None:
+        return urlopen
+    ext = os.path.splitext(file_name)[1]
+    return opener_map.get(ext, opener)
+
+
+class DeconIOBase(object):
+
+    @staticmethod
+    def prepare(data_dict):
+        holder = DeconIOBase(None)
+        holder.data = data_dict
+        return holder
+
+    def __init__(self, file_path=None):
+        self.file_path = file_path
+        if file_path is None:
+            self.data = dict()
+        else:
+            self._load(file_path)
+
+    def _load(self, file_path):
+        self.data = pickle.load(get_opener(file_path)(file_path, "rb"))
+
+    def __iter__(self):
+        return iter(self.data.items())
+
+    def subset(self, indices):
+        if not isinstance(indices, Iterable):
+            indices = [indices]
+        return self.prepare({i: self.data[i] for i in indices})
+
+    def __getitem__(self, ix):
+        return self.data[ix]
+
+    def to_db(self, file_path=None, overwrite=False):
+        if file_path is None:
+            file_path = self.file_path + '.db'
+        if file_path is None:
+            file_path = ":memory:"
+        exists = os.path.exists(file_path)
+        decon_io_logger.debug("Deconvoluted Ions Database file exists? %s", exists)
+        db = MSMSSqlDB(file_path)
+        if (exists and overwrite) or not exists:
+            decon_io_logger.debug("Initializing database")
+            db.init_schema()
+            db.load_data(self.data.values())
+        return db
+
+    def index_by_scan_ids(self):
+        index = {}
+        for i, precursor in self:
+            for scan in precursor.scans:
+                index[scan['id']] = precursor
+        return self.prepare(index)
+
+    def to_json(self, file_path):
+        json.dump({k: v.to_json() for k, v in self.data.items()}, open(file_path, 'wb'))
+
+
+def default_loader(file_path):
+    try:
+        return pickle.load(get_opener(file_path)(file_path, "rb"))
+    except Exception, e:
+        decon_io_logger.warning("Failed to open %s for default_loader", file_path, exc_info=e)
+
+
+def default_serializer(obj, file_path):
+    try:
+        pickle.dump(obj, get_opener(file_path)(file_path, "wb"))
+    except Exception, e:
+        decon_io_logger.warning("Failed to open %s for default_serializer, for %s", file_path, obj, exc_info=e)

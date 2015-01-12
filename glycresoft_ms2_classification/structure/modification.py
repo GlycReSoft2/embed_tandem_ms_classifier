@@ -1,20 +1,22 @@
 import csv
+import json
 from copy import deepcopy
-import os
 import re
-#from pkg_resources import resource_string
+from pkg_resources import resource_stream
 
 from collections import defaultdict
 from collections import Sequence as Iterable
 
-from .residue import residue_to_symbol
+from .residue import residue_to_symbol, Residue
+from .composition import composition_to_mass
+from .parser import prefix_to_postfix_modifications
 from . import PeptideSequenceBase
 from . import ModificationBase
 from . import ResidueBase
 
 target_string_pattern = re.compile(
     r'((?P<n_term>N-term)|(?P<c_term>C-term)|(?P<amino_acid>[A-Z]+))')
-protein_prospector_name_cleaner = re.compile(
+title_cleaner = re.compile(
     r'(?P<name>.*)\s(?P<target>\(.+\))?$')
 
 
@@ -69,6 +71,7 @@ class ModificationTarget(object):
         valid = (self.amino_acid_targets is None) or (
             amino_acid in self.amino_acid_targets)
         valid = valid and ((self.position_modifiers is None) or
+                           (position_modifiers is None) or
                            (position_modifiers in self.position_modifiers))
 
         return valid
@@ -122,7 +125,7 @@ class ModificationTargetPattern(ModificationTarget):
 
 def get_position_modifier_rules_dict(sequence):
     '''Labels the start and end indices of the sequence'''
-    return defaultdict(lambda: None, **{
+    return defaultdict(lambda: "internal", **{
         0: "N-term",
         (len(sequence) - 1): "C-term"
     })
@@ -135,7 +138,7 @@ class ModificationRule(object):
 
     @staticmethod
     def from_protein_prospector(amino_acid_specificity, modification_name,
-                                protein_prospector_name=None, monoisotopic_mass=None):
+                                title=None, monoisotopic_mass=None):
         # If the specificity is a string, parse it into rules
         targets = None
         if isinstance(amino_acid_specificity, str):
@@ -155,7 +158,7 @@ class ModificationRule(object):
                 isinstance(iter(amino_acid_specificity).next(), ModificationTarget):
             targets = set(amino_acid_specificity)
 
-        return ModificationRule(targets, modification_name, protein_prospector_name, monoisotopic_mass)
+        return ModificationRule(targets, modification_name, title, monoisotopic_mass)
 
     @staticmethod
     def from_unimod(unimod_entry):
@@ -167,18 +170,17 @@ class ModificationRule(object):
         return ModificationRule(specificity, full_name, title, monoisotopic_mass)
 
     def __init__(self, amino_acid_specificity, modification_name,
-                 protein_prospector_name=None, monoisotopic_mass=None, **kwargs):
+                 title=None, monoisotopic_mass=None, **kwargs):
         # Attempt to parse the protein prospector name which contains the
         # target in
         try:
-            self.name = protein_prospector_name_cleaner.search(
-                protein_prospector_name).groupdict()['name']
+            self.name = title_cleaner.search(title).groupdict()['name']
         except:
             self.name = modification_name
 
         self.unimod_name = modification_name
         self.mass = float(monoisotopic_mass)
-        self.protein_prospector_name = protein_prospector_name
+        self.title = title if title is not None else modification_name
 
         # The type of the parameter passed for amino_acid_specificity is variable
         # so select the method correct for the passed type
@@ -213,7 +215,7 @@ class ModificationRule(object):
             amino_acid, position_modifiers)]
         if len(possible_targets) == 0:
             raise Exception("No valid targets. %s for %s" %
-                            (amino_acid + position_modifiers, self))
+                            (str(amino_acid) + str(position_modifiers), self))
         minimized_target = min(possible_targets, key=len)
         rule = deepcopy(self)
         rule.targets = minimized_target
@@ -264,7 +266,6 @@ class ModificationRule(object):
                 return self
             dup = deepcopy(self)
             dup.targets = (set(self.targets) | set(other.targets))
-            #print(self.targets, other.targets, dup.targets)
             return dup
         else:
             raise TypeError(
@@ -272,7 +273,7 @@ class ModificationRule(object):
 
 
 class AnonymousModificationRule(ModificationRule):
-    parser = re.compile(r"@(?P<name>[a-zA-Z\[\];0-9]+)-(?P<mass>[0-9\.]+)")
+    parser = re.compile(r"@(?P<name>.+?)-(?P<mass>[0-9\.]+)")
 
     @classmethod
     def try_parse(cls, rule_string):
@@ -310,11 +311,59 @@ class AnonymousModificationRule(ModificationRule):
         return rep
 
 
-def load_modifications_from_file(path):
+def simple_sequence_mass(seq_list):
+    '''Because AminoAcidSubstitution may contain sequence-like entries that
+    need massing but we cannot import `sequence` here, this defines a simple
+    sequence list to total mass without any terminal groups, but handles residues
+    and modifications.
+
+    For a full sequence_to_mass converter, see the sequence module'''
+    mass = 0
+    for res, mods in seq_list:
+        mass += Residue.mass_by_name(res)
+        for mod in mods:
+            if mod != "":
+                mass += Modification.mass_by_name(mod)
+    return mass
+
+
+class AminoAcidSubstitution(AnonymousModificationRule):
+    parser = re.compile(r"@(?P<original_residue>\S+)->(?P<substitution_residue>\S+)")
+
+    @classmethod
+    def try_parse(cls, rule_string):
+        aa_sub = cls.parser.search(rule_string)
+        if aa_sub is not None:
+            match_data = aa_sub.groupdict()
+            mod = cls(match_data['original_residue'], match_data['substitution_residue'])
+            return mod
+        else:
+            return None
+
+    def __init__(self, original_residue, substitution_residue):
+        self.name = "{0}->{1}".format(original_residue, substitution_residue)
+        self.mass = 0.0
+        self.original = prefix_to_postfix_modifications(original_residue)
+        self.substitution = prefix_to_postfix_modifications(substitution_residue)
+        self.delta = simple_sequence_mass(self.substitution) - simple_sequence_mass(self.original)
+
+    def serialize(self):
+        return "@" + self.name
+
+    def __repr__(self):
+        return "{name}:{delta}".format(**self.__dict__)
+
+
+def load_from_csv(stream):
     modification_definitions = []
-    with open(path, 'rb') as fh:
-        parser = csv.DictReader(fh)
-        modification_definitions = [rec for rec in parser]
+    parser = csv.DictReader(stream)
+    modification_definitions = [rec for rec in parser]
+    return modification_definitions
+
+
+def load_from_json(stream):
+    modification_definitions = []
+    modification_definitions = map(ModificationRule.from_unimod, json.load(stream))
     return modification_definitions
 
 
@@ -326,22 +375,40 @@ class ModificationTable(dict):
     # Class Constants`
     # Path to the bootstrapping data file for Protein Prospector-defined
     # modifications
-    _table_definition_file = os.path.join(
-        os.path.dirname(__file__), "data", "ProteinProspectorModifications-for_gly2.csv")
+    _table_definition_file = staticmethod(lambda: resource_stream(__name__,
+                                          "data/ProteinProspectorModifications-for_gly2.csv"))
+    _unimod_definitions = staticmethod(lambda: resource_stream(__name__, "data/unimod.json"))
+
+    use_unimod = True
 
     # Other objects that are described as Modifications that don't appear in
     # Protein Prospector output
     other_modifications = {
         "HexNAc": ModificationRule("N", "HexNAc", "HexNAc", 203.07937),
-        "pyroGlu": ModificationRule("Q", "pyroGlu", "pyroGlu", -17.02655)
+        #"pyroGlu": ModificationRule("Q", "pyroGlu", "pyroGlu", -17.02655),
+        "H": ModificationRule("N-term", "H", "H", composition_to_mass("H")),
+        "OH": ModificationRule("C-term", "OH", "OH", composition_to_mass("OH")),
     }
 
     # Class Methods
     @classmethod
-    def load_from_file(cls, path):
-        '''Load the rules definitions from a CSV file and instantiate a ModificationTable from it'''
-        definitions = load_modifications_from_file(path)
+    def load_from_file(cls, stream=None, format="csv"):
+        '''Load the rules definitions from a CSV or JSON file and instantiate a ModificationTable from it'''
+        if stream is None:
+            return cls.load_from_file_default()
+        if format == "csv":
+            definitions = load_from_csv(stream)
+        elif format == "json":
+            definitions = load_from_json(stream)
         return ModificationTable(definitions)
+
+    @classmethod
+    def load_from_file_default(cls):
+        '''Load the rules definitions from the default package files'''
+        defs = load_from_csv(cls._table_definition_file())
+        if cls.use_unimod:
+            defs += load_from_json(cls._unimod_definitions())
+        return ModificationTable(defs)
 
     bootstrapped = None
 
@@ -350,12 +417,12 @@ class ModificationTable(dict):
         '''Load the bootstrapping file's definitions and instantiate a ModificationTable from it'''
         if cls.bootstrapped is not None and reuse:
             return cls.bootstrapped
-        instance = cls.load_from_file(cls._table_definition_file)
+        instance = cls.load_from_file()
         cls.bootstrapped = instance
         return instance
 
     # Instance Methods
-    def __init__(self, modification_definitions=None, constant_modifications=None, variable_modifications=None):
+    def __init__(self, modification_definitions=None):
         '''Creates a table from a list of ModificationRules. Assumes that every possibility is available.
         Is an instance of a dictionary object, and therefore can be used as an iterable.
 
@@ -365,16 +432,16 @@ class ModificationTable(dict):
         super(ModificationTable, self).__init__()
         self.modification_rules = []
         for definition in modification_definitions:
-            self.modification_rules.append(ModificationRule(**definition))
+            if not isinstance(definition, ModificationRule):
+                definition = ModificationRule(**definition)
+            self.modification_rules.append(definition)
         self.modification_rules.extend(
             ModificationTable.other_modifications.values())
-        self.constant_modifications = dict()
-        self.variable_modifications = dict()
 
         # A simple look-up by Protein Prospector name to make populating from
         # the GlycReSoft output easier
-        self.by_protein_prospector_name = {
-            modification.protein_prospector_name: modification for modification in self.modification_rules
+        self.by_title = {
+            modification.title: modification for modification in self.modification_rules
         }
 
         for name, mod in ModificationTable.other_modifications.items():
@@ -395,7 +462,7 @@ class ModificationTable(dict):
                 self[key] = value
         else:
             try:
-                mod = self.by_protein_prospector_name[key]
+                mod = self.by_title[key]
                 if mod.name in self:
                     self[mod.name] += mod
                 else:
@@ -418,18 +485,45 @@ class ModificationTable(dict):
         else:
             self.pop(name)
 
+    def update_modifications(self, *args, **kwargs):
+        '''Update with multiple modification rules'''
+        for mod in args:
+            self.add_modification(mod)
+        for name, mod in kwargs.items():
+            self.add_modification(name, mod)
+
     def __getitem__(self, key):
+        '''Try to get the value directly, then try the alternative name
+        and finally try a cleaned version of the alternative name'''
         try:
             return dict.__getitem__(self, key)
-        except KeyError, err:
+        except KeyError:
             try:
-                name = protein_prospector_name_cleaner.search(
-                    key).groupdict()["name"]
-            except:
-                raise err
-            return dict.__getitem__(self, name)
+                return self.by_title[key]
+            except KeyError:
+                try:
+                    name = title_cleaner.search(
+                        key).groupdict()["name"]
+                except KeyError:
+                    raise ModificationStringParseError("Could not parse {0}".format(key))
+                except AttributeError:
+                    raise ModificationStringParseError("Could not parse {0}".format(key))
+                try:
+                    return dict.__getitem__(self, name)
+                except:
+                    return self.by_title[name]
+
+    def keys(self):
+        return dict.keys(self) + self.by_title.keys()
+
+    def values(self):
+        return dict.values(self) + self.by_title.values()
+
+    def items(self):
+        return dict.items(self) + self.by_title.items()
 
     def get_modification(self, name, position=-1, number=1):
+        '''Build a Modification instance from the ModificationRule given by `name`'''
         try:
             mod_rule = self[name]
         except:
@@ -441,6 +535,10 @@ class ModificationTable(dict):
         return modification_instance
 
 
+class ModificationStringParseError(Exception):
+    pass
+
+
 class RestrictedModificationTable(ModificationTable):
 
     '''Creates a table from a list of ModificationRules. Assumes that we begin with a set of all rules,
@@ -448,19 +546,20 @@ class RestrictedModificationTable(ModificationTable):
 
     Is an instance of a dictionary object, and therefore can be used as an iterable.
 
-    modification_definitions - A list of ModificationRule objects which define all possible rules from
+    :param modification_definitions - A list of ModificationRule objects which define all possible rules from
                                external sources. They will be filtered down.
-    constant_modifications   - A list of modification names present in the table to include in the
+    :param constant_modifications   - A list of modification names present in the table to include in the
                               constant_modifications sub-table
-    variable_modifications   - A list of modification names present in the table to include in the
+    :param variable_modifications   - A list of modification names present in the table to include in the
                                variable_modifications sub-table
     '''
     # Class Methods
     @classmethod
-    def load_from_file(cls, path, constant_modifications=None, variable_modifications=None):
+    def load_from_file(cls, path=None, constant_modifications=None, variable_modifications=None):
         '''Load the rules definitions from a CSV file and instantiate a RestrictedModificationTable from it'''
-        definitions = load_modifications_from_file(path)
-        return RestrictedModificationTable(definitions, constant_modifications, variable_modifications)
+        definitions = super(RestrictedModificationTable, cls).load_from_file(path).values()
+        inst = RestrictedModificationTable(definitions, constant_modifications, variable_modifications)
+        return inst
 
     bootstrapped = None
 
@@ -469,90 +568,42 @@ class RestrictedModificationTable(ModificationTable):
         '''Load the bootstrapping file's definitions and instantiate a RestrictedModificationTable from it'''
         if cls.bootstrapped is not None and reuse:
             return cls.bootstrapped
-        instance = cls.load_from_file(
-            cls._table_definition_file, constant_modifications, variable_modifications)
+        instance = cls.load_from_file(None, constant_modifications, variable_modifications)
         cls.bootstrapped = instance
         return instance
 
     def __init__(self, modification_rules, constant_modifications=None, variable_modifications=None):
         super(RestrictedModificationTable, self).__init__(modification_rules)
-        if constant_modifications is not None:
-            self._add_constant_modifications(*constant_modifications)
-        if variable_modifications is not None:
-            self._add_variable_modifications(*variable_modifications)
+        if constant_modifications is None:
+            constant_modifications = []
+        self.constant_modifications = constant_modifications
+        if variable_modifications is None:
+            variable_modifications = []
+        self.variable_modifications = variable_modifications
 
-        # Add the other common modifications as variable modifications so they
-        # are in a table
-        self._add_variable_modifications(
-            *[x.name for x in ModificationTable.other_modifications.values()])
-        self._collect_available_modifications()
+        self.collect_available_modifications()
 
-    def _add_constant_modifications(self, *protein_prospector_names):
-        for prot_name in protein_prospector_names:
-            if isinstance(prot_name, ModificationRule):
-                if prot_name.name in self.constant_modifications:
-                    self.constant_modifications[prot_name.name] += prot_name
-                else:
-                    self.constant_modifications[prot_name.name] = prot_name
-            else:
-                try:
-                    mod = self.by_protein_prospector_name[prot_name]
-                    if mod.name in self.constant_modifications:
-                        self.constant_modifications[mod.name] += mod
-                    else:
-                        self.constant_modifications[mod.name] = mod
-                except KeyError, e:
-                    print(e)
-                    try:
-                        matches = [
-                            mod for mod in self.modification_rules if mod.name == prot_name]
-                        mod = sum(matches[1:], matches[0])
-                        if mod.name in self.constant_modifications:
-                            self.constant_modifications[mod.name] += mod
-                        else:
-                            self.constant_modifications[mod.name] = mod
-                    except:
-                        pass
-
-    def _add_variable_modifications(self, *protein_prospector_names):
-        for prot_name in protein_prospector_names:
-            if isinstance(prot_name, ModificationRule):
-                if prot_name.name in self.variable_modifications:
-                    self.variable_modifications[prot_name.name] += prot_name
-                else:
-                    self.variable_modifications[prot_name.name] = prot_name
-            else:
-                try:
-                    mod = self.by_protein_prospector_name[prot_name]
-                    if mod.name in self.variable_modifications:
-                        self.variable_modifications[
-                            mod.name] += mod
-                    else:
-                        self.variable_modifications[mod.name] = mod
-                except KeyError, e:
-                    print(e)
-                    try:
-                        matches = [
-                            mod for mod in self.modification_rules if mod.name == prot_name]
-                        mod = sum(matches[1:], matches[0])
-                        if mod.name in self.variable_modifications:
-                            self.variable_modifications[mod.name] += mod
-                        else:
-                            self.variable_modifications[mod.name] = mod
-                    except:
-                        pass
-
-    def _collect_available_modifications(self):
+    def collect_available_modifications(self):
         '''Clears the rules stored in the core dictionary (on self, but not its data members),
         and copies all information in the data member sub-tables into the core dictionary'''
-        self.clear()
-        for name, mod in self.constant_modifications.items():
-            self[name] = mod
-        for name, mod in self.variable_modifications.items():
-            if name in self:
-                self[name] += mod
+        modifications = {}
+
+        for name in self.constant_modifications + self.variable_modifications:
+            mod = deepcopy(self[name])
+            target = extract_targets_from_string(title_cleaner.search(name).groupdict()["target"])
+            mod.targets = {target}
+            if mod.name in modifications:
+                modifications[mod.name] += mod
             else:
-                self[name] = mod
+                modifications[mod.name] = mod
+
+        self.clear()
+        self.update(modifications)
+
+        self.by_title = {}
+        self.by_title = {
+            modification.title: modification for modification in self.values()
+        }
 
 
 class Modification(ModificationBase):
@@ -579,12 +630,16 @@ class Modification(ModificationBase):
         if(isinstance(rule, basestring)):
             try:
                 rule = Modification._table[rule]
-            except KeyError:
+            except ModificationStringParseError:
                 anon = AnonymousModificationRule.try_parse(rule)
                 if anon is None:
-                    raise Exception(
-                        "Could not resolve Modification Name: %s" % rule)
-                rule = anon
+                    aa_sub = AminoAcidSubstitution.try_parse(rule)
+                    if aa_sub is None:
+                        raise Exception("Could not resolve Modification Name: %s" % rule)
+                    else:
+                        rule = aa_sub
+                else:
+                    rule = anon
 
         self.name = rule.name
         self.mass = rule.mass
@@ -593,7 +648,12 @@ class Modification(ModificationBase):
         self.rule = rule
 
     def serialize(self):
-        return self.rule.serialize()
+        rep = self.rule.serialize()
+        if self.number > 1:
+            # Numbers large than 1 will cause errors in lookup. Need
+            # to incorporate a method for inferring number from string
+            rep = "{0}{{{1}}}".format(rep, self.number)
+        return rep
 
     def valid_site(self, amino_acid=None, position_modifiers=None):
         return self.rule.valid_site(amino_acid, position_modifiers)
@@ -605,8 +665,18 @@ class Modification(ModificationBase):
         return self.rule.find_valid_sites(sequence)
 
     def __repr__(self):
-        rep = "{name}[{number}]".format(**self.__dict__)
+        rep = "{name}{{{number}}}".format(**self.__dict__)
         return rep
 
     def __hash__(self):
         return hash(str(self))
+
+    def __eq__(self, other):
+        if isinstance(other, Modification):
+            other = other.serialize()
+        return self.serialize() == other
+
+    def __ne__(self, other):
+        if isinstance(other, Modification):
+            other = other.serialize()
+        return self.serialize() != other

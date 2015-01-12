@@ -1,6 +1,12 @@
 import os
-import sys
 import logging
+logfile = os.path.expanduser("~/.glycresoft-log")
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger()
+fh = logging.FileHandler(logfile, mode='w')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
+logger.addHandler(logging.StreamHandler())
 
 import atexit
 import json
@@ -10,6 +16,8 @@ try:
     import urllib2 as url_parser  # python 2
 except ImportError:
     import urllib.parse as url_parser  # python 3
+
+import multiprocessing
 
 from error_code_interface import *
 # Import the pipeline modules, wrapping any ImportErrors in the cross-runtime communication
@@ -33,7 +41,7 @@ except ImportError, e:
     exit(exception.errcode)
 
 
-def load_parameters(param_file):
+def load_parameters_from_json(param_file):
     handle = None
     if hasattr(param_file, 'read'):
         handle = param_file
@@ -49,8 +57,8 @@ def load_parameters(param_file):
 def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications,
                                    enzyme_info, n_processes):
     try:
-        path, fragments = theoretical_glycopeptide.main(ms1_results_file, sites_file, constant_modifications,
-                                                        variable_modifications, enzyme_info, n_processes)
+        path = theoretical_glycopeptide.main(ms1_results_file, sites_file, constant_modifications,
+                                             variable_modifications, enzyme_info, n_processes)
         return path
     except NoSitesFoundException, e:
         raise NoSitesFoundWrapperException(str(e))
@@ -61,7 +69,7 @@ def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifi
 def match_deconvoluted_ions(theoretical_ion_space, deconvoluted_spectra,
                             ms1_match_tolerance, ms2_match_tolerance, n_processes):
     try:
-        path, data = match_ions2.match_frags(
+        path = match_ions2.match_frags(
             theoretical_ion_space, deconvoluted_spectra,
             ms1_match_tolerance, ms2_match_tolerance, split_decon_data=True,
             n_processes=n_processes,
@@ -78,7 +86,6 @@ def postprocess_matches(matched_ions_file):
 
 def prepare_model_file(postprocessed_ions_file, method="full_random_forest", out=None):
     try:
-        print(postprocessed_ions_file)
         task = PrepareModelTask(
             model_file_path=postprocessed_ions_file, method="full_random_forest", output_path=out)
         result = task.run()
@@ -100,8 +107,21 @@ def classify_data_by_model(
         raise ClassificationException(str(e))
 
 
-def windows_to_unix_path(path):
-    return path.replace("\\", "/")
+def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra, model_file_path,
+                                   method="full_random_forest", ms1_match_tolerance=1e-5, ms2_match_tolerance=2e-5,
+                                   out=None,  n_decoys=20, predicates=None, n_processes=6):
+    try:
+        predicates = predicates if predicates is not None else calculate_fdr.default_predicates()
+        outfile_path = calculate_fdr.main(scored_matches_path=scored_predictions_file, decon_data=deconvoluted_spectra,
+                                          model_file_path=model_file_path, decoy_matches_path=None,
+                                          outfile_path=out, num_decoys_per_real_mass=n_decoys,
+                                          predicate_fns=predicates, prefix_len=0, suffix_len=0, by_mod_sig=False,
+                                          ms1_tolerance=ms1_match_tolerance, ms2_tolerance=ms2_match_tolerance,
+                                          method="full_random_forest", method_init_args=None,
+                                          method_fit_args=None, n_processes=n_processes)
+        return outfile_path
+    except NameError, e:
+        pass
 
 
 def clean_up_files(*files):
@@ -115,7 +135,7 @@ intermediary_files = []
 
 
 def __intermediary_files():
-    print(intermediary_files)
+    os.remove(*intermediary_files)
 
 
 def uri_decode(uri):
@@ -123,7 +143,6 @@ def uri_decode(uri):
 
 
 def uri_decode_list(uri_list=None):
-    print(uri_list)
     if uri_list is None:
         return None
     return map(uri_decode, uri_list)
@@ -224,11 +243,14 @@ def main():
         "--ms1-results-file", action="store", required=True)
     build_model_app.add_argument(
         "--glycosylation-sites-file", action="store", required=True)
+
     build_model_app.add_argument("-e", "--enzyme", action="store", help="Name of the enzyme used")
     build_model_app.add_argument("-p", "--protein_prospector_xml", action="store", help="path to msdgist XML file.\
      Instead of --enzyme,--constant_modifications and --variable_modifications")
+
     build_model_app.add_argument(
         "--deconvoluted-spectra-file", action="store", required=True)
+
     build_model_app.add_argument("--method", action="store", default="full_random_forest",
                                  choices=set(PrepareModelTask.method_table),
                                  help="Select the model method to use for classification")
@@ -236,12 +258,12 @@ def main():
         "--ms1-match-tolerance", type=float, action="store",
         default=match_ions2.ms1_tolerance_default,
         help="Mass Error Tolerance for matching MS1 masses in PPM")
+
     build_model_app.add_argument(
         "--ms2-match-tolerance", type=float, action="store",
         default=match_ions2.ms2_tolerance_default,
         help="Mass Error Tolerance for matching MS2 masses in PPM")
-    build_model_app.add_argument("--protein-prospector-xml", default=None, help="Parse out modification\
-                                 information form the Protein Prospector XML output")
+
     build_model_app.add_argument(
         "--constant-modification-list", type=str, action="append", default=None,
         help="Pass the list of constant modifications to include in the sequence search space")
@@ -338,21 +360,24 @@ def main():
 
         param_file = args.pop("parameter_file", None)
         if param_file is not None:
-            params = load_parameters(param_file)
+            params = load_parameters_from_json(param_file)
             args.update(params)
         if debug:
-            print(json.dumps(args, indent=4))
-            logging.info(json.dumps(args, indent=4))
-            logging.basicConfig(filename="debug.txt", level=logging.DEBUG)
+            logger.info(json.dumps(args, indent=4))
         else:
-            atexit.register(lambda: clean_up_files(*intermediary_files))
+            #atexit.register(lambda: clean_up_files(*intermediary_files))
+            pass
+        logger.debug("Entering main program")
         func(**args)
     except GlycReSoftInterprocessCommunicationException, e:
-        print(e)
+        logger.debug("An error occurred", exc_info=e)
         exit(e.errcode)
-    # except Exception, e:
-    #     print(e)
-    #     exit(-255)
+    except MemoryError, e:
+        logger.debug("An error occurred", exc_info=e)
+        exit(MemoryErrorWrapperException.errcode)
+    except Exception, e:
+        logger.debug("An error occurred", exc_info=e)
+        exit(-255)
     exit(0)
 
 if __name__ == '__main__':
