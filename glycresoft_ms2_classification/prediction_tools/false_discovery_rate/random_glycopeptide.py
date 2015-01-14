@@ -177,6 +177,7 @@ def forge_prediction_record(sequence, reference):
 
     glycan_map = {}
     modifications = []
+    loc_rules = modification.get_position_modifier_rules_dict(seq_obj)
     for i, (aa, mods) in enumerate(seq_obj):
         for mod in mods:
             if "Glycan" in mod.name:
@@ -185,7 +186,7 @@ def forge_prediction_record(sequence, reference):
                 # Construct the set of acceptable reasons why this modification is here.
                 # Infer the least permissive modification rule.
                 try:
-                    why = mod.why_valid(aa, i)
+                    why = mod.why_valid(aa, loc_rules[i])
                     modifications.append(modification.Modification(why, (i,)))
                 except AttributeError:
                     print(mod)
@@ -211,8 +212,7 @@ def forge_prediction_record(sequence, reference):
     forgery["_old_Glycopeptide_identifier"] = str(sequence)
     forgery.Calc_mass = calculated_mass
     forgery.Obs_Mass = forgery.Calc_mass - reference.ppm_error
-    forgery.Glycopeptide_identifier = str(
-        seq_obj) + glycan_composition_restring
+    forgery.Glycopeptide_identifier = str(seq_obj)
     forgery.Glycan = glycan_composition_restring
     forgery.glyco_sites = len(glycan_map)
     forgery.Seq_with_mod = str(seq_obj)
@@ -317,7 +317,7 @@ class RandomGlycopeptideBuilder(object):
                  glycans=None, cleavage_start=None, cleavage_end=None, ignore_sequences=None):
         if glycans is None:
             glycans = mammalian_glycans
-        self.glycans = glycans
+        self.glycans = set(glycans)
         if constant_modifications is None:
             constant_modifications = []
         else:
@@ -355,7 +355,7 @@ class RandomGlycopeptideBuilder(object):
             map(lambda x: GrowingSequence(x, self.cleavage_pattern),
                 itertools.chain.from_iterable(
                     map(lambda x: ("{0}({1}){2}".format(x[0], g.as_modification().serialize(), x[1:])
-                                   for g in glycans),
+                                   for g in self.glycans),
                         generate_n_linked_sequons()))
                 )
         )

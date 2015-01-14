@@ -267,6 +267,12 @@ class Sequence(PeptideSequenceBase):
     def __hash__(self):
         return hash(str(self))
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
+    def __ne__(self, other):
+        return str(self) != str(other)
+
     def break_golden_pair(self, frag):
         if isinstance(frag, Fragment):
             kind = frag.type

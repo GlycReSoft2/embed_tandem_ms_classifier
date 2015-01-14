@@ -100,15 +100,20 @@ def random_glycopeptide_to_fragments(sequence_record):
         raise
     glycan_map = {}
     modifications = []
+    loc_rules = modification.get_position_modifier_rules_dict(seq_obj)
     for i, (aa, mods) in enumerate(seq_obj):
         for mod in mods:
-            if mod.name in {"Glycan", "HexNAc"}:
+            if "Glycan" in mod.name:
                 glycan_map[i] = mod.name
             else:
                 # Construct the set of acceptable reasons why this modification is here.
                 # Infer the least permissive modification rule.
-                why = mod.why_valid(aa, i)
-                modifications.append(modification.Modification(why, (i,)))
+                try:
+                    why = mod.why_valid(aa, loc_rules[i])
+                    modifications.append(modification.Modification(why, (i,)))
+                except AttributeError:
+                    print(mod)
+                    raise
 
     # Remove glycans from the sequence string to conform to the SequenceSpace expectations
     for site, glycan in glycan_map.items():

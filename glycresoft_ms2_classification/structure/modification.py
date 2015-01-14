@@ -36,8 +36,15 @@ def extract_targets_from_string(target_string):
     return target
 
 
-class ModificationTarget(object):
+def get_position_modifier_rules_dict(sequence):
+    '''Labels the start and end indices of the sequence'''
+    return defaultdict(lambda: "internal", **{
+        0: "N-term",
+        (len(sequence) - 1): "C-term"
+    })
 
+
+class ModificationTarget(object):
     '''Specifies the range of targets that a given modification can be found at.'''
 
     @staticmethod
@@ -67,14 +74,19 @@ class ModificationTarget(object):
             amino_acid = amino_acid.symbol
         amino_acid = residue_to_symbol.get(amino_acid, amino_acid)
         valid = False
-        # Validate amino acid target target
-        valid = (self.amino_acid_targets is None) or (
-            amino_acid in self.amino_acid_targets)
-        valid = valid and ((self.position_modifiers is None) or
-                           (position_modifiers is None) or
-                           (position_modifiers in self.position_modifiers))
+        try:
+            # Validate amino acid target target
+            valid = (self.amino_acid_targets is None) or (
+                amino_acid in self.amino_acid_targets)
+            valid = valid and ((self.position_modifiers is None) or
+                               (position_modifiers is None) or
+                               (position_modifiers in self.position_modifiers))
 
-        return valid
+            return valid
+        except:
+            print(valid, self.amino_acid_targets, self.position_modifiers,
+                  amino_acid, position_modifiers)
+            raise
 
     def valid_site_seq(self, sequence, position, position_modifiers=None):
         if(isinstance(sequence, PeptideSequenceBase)):
@@ -121,14 +133,6 @@ class ModificationTargetPattern(ModificationTarget):
             target_slice = sequence[(position - self.offset):]
         matched = self.pattern.search(target_slice)
         return matched is not None
-
-
-def get_position_modifier_rules_dict(sequence):
-    '''Labels the start and end indices of the sequence'''
-    return defaultdict(lambda: "internal", **{
-        0: "N-term",
-        (len(sequence) - 1): "C-term"
-    })
 
 
 class ModificationRule(object):
@@ -673,7 +677,7 @@ class Modification(ModificationBase):
 
     def __eq__(self, other):
         if isinstance(other, Modification):
-            other = other.serialize()
+            return (self.name == other.name) and (self.number == other.number)
         return self.serialize() == other
 
     def __ne__(self, other):

@@ -66,3 +66,20 @@ class MassWrapper(object):
 
     def __repr__(self):
         return "MassWrapper({0})[{1}]".format(str(self.object), self.mass)
+
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        '''Comparison should be based on comparing
+        two wrappers with object attributes'''
+        try:
+            return self.object == other.object
+        except:
+            return False
+
+    def __ne__(self, other):
+        try:
+            return self.object != other.object
+        except:
+            return True

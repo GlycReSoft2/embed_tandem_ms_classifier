@@ -30,6 +30,16 @@ filter_terms_type_map = {
 }
 
 
+def make_search_strategy(name, start="min", step_fn=inc(0.05), stop="max"):
+    strategy = {
+        "name": name,
+        "start": start,
+        "step": step_fn,
+        "stop": stop
+    }
+    return strategy
+
+
 def query_threshold(MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0,
                     peptideLens=0, Obs_Mass=0, numStubs=-1):
     query_string = "(MS2_Score >= {MS2_Score} and  meanCoverage >= {meanCoverage} and\

@@ -9,6 +9,7 @@ from glycresoft_ms2_classification import match_ions2
 from glycresoft_ms2_classification import postprocess2
 
 from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import make_decoys
+from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import parameter_search_optimizer
 
 
 # Filter Predicate Logic
@@ -130,6 +131,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
     decoy_matches_frame = classify_matches.prepare_model_file(
         decoy_matches_path)
     results = []
+    logger.info("Evaluating predicates")
     for predicate in predicate_fns:
         # Modification Group Specific
         if by_mod_sig:

@@ -55,6 +55,14 @@ class Glycan(object):
     def __hash__(self):
         return hash(str(self))
 
+    def __eq__(self, other):
+        comp_eq = all(i == j for i, j in zip(self.composition, other.composition))
+        return comp_eq
+
+    def __ne__(self, other):
+        comp_eq = any(i != j for i, j in zip(self.composition, other.composition))
+        return comp_eq
+
 
 class GlycanHypothesis(list):
     def __init__(self, csv_path=None):
