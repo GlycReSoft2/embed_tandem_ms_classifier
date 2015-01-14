@@ -3,27 +3,22 @@ import itertools
 import random
 import re
 import logging
-
+logger = logging.getLogger("random_sequence_builder")
+logger.setLevel("INFO")
 from math import fabs
 
 
-from .structure.sequence import Sequence
-from .structure.sequence import GrowingSequence
-from .structure.sequence import Protease
-
-from .structure.sequence import strip_modifications
-from .structure.sequence import sequence_to_mass
-
-from .structure.stub_glycopeptides import StubGlycopeptide
-
-from .structure.composition import Composition
-
-from .structure import modification
-from .structure import residue
-
-from .structure import glycans as glycan_lib
-
-from .utils.mass_heap import MassHeap
+from glycresoft_ms2_classification.structure.sequence import Sequence
+from glycresoft_ms2_classification.structure.sequence import GrowingSequence
+from glycresoft_ms2_classification.structure.sequence import Protease
+from glycresoft_ms2_classification.structure.sequence import strip_modifications
+from glycresoft_ms2_classification.structure.sequence import sequence_to_mass
+from glycresoft_ms2_classification.structure.stub_glycopeptides import StubGlycopeptide
+from glycresoft_ms2_classification.structure.composition import Composition
+from glycresoft_ms2_classification.structure import modification
+from glycresoft_ms2_classification.structure import residue
+from glycresoft_ms2_classification.structure import glycans as glycan_lib
+from glycresoft_ms2_classification.utils.mass_heap import MassHeap
 
 mammalian_glycans = glycan_lib.load_from_file()
 
@@ -107,12 +102,12 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
                                for g in glycans),
                     generate_n_linked_sequons()
                     )
-            )
-            )
+        )
+        )
     )
 
-    logging.info(components)
-    logging.info(sequons)
+    logger.debug(components)
+    logger.debug(sequons)
 
     loc_fabs = fabs
     water = Composition("H2O").mass
@@ -134,7 +129,7 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
             glycosylated_options = list(sequons.get_lower_than(mass_to_meet))
             options += glycosylated_options
 
-        #logging.info("%s options for extension, mass to meet: %s, %s" % (len(options), mass_to_meet, str(candidate)))
+        #logger.debug("%s options for extension, mass to meet: %s, %s" % (len(options), mass_to_meet, str(candidate)))
         next_part = random.choice(options)
         candidate.extend(next_part)
         mass_to_meet -= (next_part.mass - water)
@@ -156,11 +151,11 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
 
             error = loc_fabs(
                 (target_mass - padded_sequence.mass) / float(target_mass))
-            logging.info("%s, %s, %s" %
+            logger.debug("%s, %s, %s" %
                          (padded_sequence, padded_sequence.mass, error))
             # Accept?
             if error <= ppm_error:
-                logging.info("Accepting %s %s" %
+                logger.debug("Accepting %s %s" %
                              (padded_sequence, padded_sequence.mass))
                 solutions.add(str(padded_sequence))
 
@@ -176,7 +171,7 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
 
 def forge_prediction_record(sequence, reference):
     seq_obj = Sequence(sequence) if isinstance(
-        sequence, basestring) else sequence
+        sequence, basestring) else copy.deepcopy(sequence)
 
     calculated_mass = seq_obj.mass
 
@@ -202,18 +197,22 @@ def forge_prediction_record(sequence, reference):
         # Don't discard anonymous HexNAcs. Downstream functions can handle them
         if glycan != "HexNAc":
             seq_obj.drop_modification(site, glycan)
+            seq_obj.add_modification(site, "HexNAc")
 
     # Build the semicolon separated string for glycan compositions
     glycan_composition = []
     glycan_composition = [map(int, glycan.replace("Glycan", '').replace("[", "").replace("]", "").split(";"))
                           for glycan in glycan_map.values()]
     glycan_composition = map(sum, zip(*glycan_composition))
-    glycan_composition_restring = "[" + ";".join(map(str, glycan_composition)) + "]"
+    glycan_composition_restring = "[" + \
+        ";".join(map(str, glycan_composition)) + "]"
 
     forgery = reference.copy()
+    forgery["_old_Glycopeptide_identifier"] = str(sequence)
     forgery.Calc_mass = calculated_mass
     forgery.Obs_Mass = forgery.Calc_mass - reference.ppm_error
-    forgery.Glycopeptide_identifier = str(seq_obj) + glycan_composition_restring
+    forgery.Glycopeptide_identifier = str(
+        seq_obj) + glycan_composition_restring
     forgery.Glycan = glycan_composition_restring
     forgery.glyco_sites = len(glycan_map)
     forgery.Seq_with_mod = str(seq_obj)
@@ -409,14 +408,14 @@ class RandomGlycopeptideBuilder(object):
 
                 error = loc_fabs(
                     (target_mass - padded_sequence.mass) / float(target_mass))
-                logging.info("%s, %s, %s" %
+                logger.debug("%s, %s, %s" %
                              (padded_sequence, padded_sequence.mass, error))
                 # Accept?
                 if error <= ppm_error:
                     if str(padded_sequence) in self.ignore_sequences:
                         continue
-                    logging.info("Accepting %s %s" %
-                                 (padded_sequence, padded_sequence.mass))
+                    logger.debug("Accepting %s %s" %
+                                (padded_sequence, padded_sequence.mass))
                     solutions.add(str(padded_sequence))
 
             # Reset, too big?

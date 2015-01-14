@@ -441,7 +441,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     metadata = sqlitedict.SqliteDict(db_file, tablename="metadata")
     metadata["ms1_ppm_tolerance"] = ms1_tolerance
     metadata["ms2_ppm_tolerance"] = ms2_tolerance
-
+    metadata["deconvoluted_spectra_file"] = decon_data
     if "tag" not in metadata:
         metadata["tag"] = tag
     if metadata["tag"] == "decoy":

@@ -2,7 +2,6 @@ import os
 import unittest
 import warnings
 import csv
-import json
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
@@ -17,15 +16,19 @@ from glycresoft_ms2_classification import entry_point
 from glycresoft_ms2_classification import classify_matches
 
 from glycresoft_ms2_classification.structure import sequence
+from glycresoft_ms2_classification.structure import glycans
+from glycresoft_ms2_classification.structure import modification
 from glycresoft_ms2_classification.structure import composition
+
+from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import random_glycopeptide
 
 
 class IonMatchingPipeline(unittest.TestCase):
-    db_file_name = "test_data/MS1-matching-output 20131219_005.db"
-    ms1_matching_output_file = "test_data/MS1-matching-output 20131219_005.csv"
-    ms2_decon_file = "test_data/USSR_Ungrouped.yaml"
-    glycosylation_sites_file = "test_data/USSR-glycosylation site list.txt"
-    protein_prospector_file = "test_data/KK-USSR-digest-Prospector output.xml"
+    db_file_name = "test_data/USSR/Resultsof20131219_005.db"
+    ms1_matching_output_file = "test_data/USSR/Resultsof20131219_005.csv"
+    ms2_decon_file = "test_data/USSR/USSR_Grouped.yaml"
+    glycosylation_sites_file = "test_data/USSR/USSR-glycosylation site list.txt"
+    protein_prospector_file = "test_data/USSR/ProteinProspectorKK.xml"
     constant_modifications = ["Carbamidomethyl (C)"]
     variable_modifications = ["Deamidated (N)", "Deamidated (Q)"]
     method = "full_random_forest"
@@ -34,14 +37,11 @@ class IonMatchingPipeline(unittest.TestCase):
     ms2_match_tolerance = 2E-05
     num_procs = 6
 
-    theoretical_ion_space_file = "test_data/MS1-matching-output 20131219_005.theoretical_ions.json"
-    ms2_match_file = "test_data/MS1-matching-output 20131219_005.match_frags.json"
-    postprocessed_ions_file = "test_data/MS1-matching-output 20131219_005.processed.json"
-    model_file_path = "test_data/MS1-matching-output 20131219_005.model.json"
+    postprocessed_ions_file = "test_data/USSR/Resultsof20131219_005.processed.json"
+    model_file_path = "test_data/USSR/Resultsof20131219_005.model.json"
     test_model_file_path = "test_data/USSRInfluenzaModel.json"
-    classification_results_file = "test_data/MS1-matching-output 20131219_005.scored.json"
+    classification_results_file = "test_data/USSR/Resultsof20131219_005.scored.json"
     model_eval_file = None
-    extern_eval_file = "test_data/Solomon_Islands_results-scored-annotated.scored.json"
 
     def test_1_theoretical_ion_space_step(self):
         print("test_1_theoretical_ion_space_step")
@@ -105,14 +105,14 @@ class IonMatchingPipeline(unittest.TestCase):
     #             # Windows doesn't like really long file names.
     #             print(e)
 
-    # def test_7_calculate_fdr_step(self):
-    #     print("test_7_calculate_fdr_step")
+    def test_7_calculate_fdr_step(self):
+        print("test_7_calculate_fdr_step")
 
-    #     predicates = calculate_fdr.default_predicates()
-    #     self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
-    #                                           self.test_model_file_path, suffix_len=1,
-    #                                           predicate_fns=predicates)
-    #     self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
+        predicates = calculate_fdr.default_predicates()
+        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
+                                              self.test_model_file_path, suffix_len=1,
+                                              predicate_fns=predicates, n_processes=self.num_procs)
+        self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
 
     # def test_8_apply_to_different_dataset(self):
     #     reclassified_file = entry_point.CompareModelsDiagnosticTask(self.test_model_file_path,
@@ -170,6 +170,34 @@ class TestSequenceFragmentation(unittest.TestCase):
         for i, frag in enumerate(seq_obj.get_fragments("B")):
             self.assertAlmostEqual(frag[0].mass, b_ion_fragment_masses[i])
 
+
+class TestSequenceParsing(unittest.TestCase):
+    seq_no_glycosites = "PEPTIDE"
+    seq_1_glycosites = "PEPTINETIDE"
+    seq_2_glycosites = "PEPTINNSTIDE"
+
+    def test_n_glycan_sequon_finder(self):
+        no_sites = sequence.find_n_glycosylation_sequons(self.seq_no_glycosites)
+        self.assertTrue(len(no_sites) == 0)
+        one_site = sequence.find_n_glycosylation_sequons(self.seq_1_glycosites)
+        self.assertTrue(len(one_site) == 1)
+        self.assertTrue(one_site[0] == 5)
+        two_site = sequence.find_n_glycosylation_sequons(self.seq_2_glycosites)
+        self.assertTrue(len(two_site) == 2)
+        self.assertTrue(two_site[0] == 5)
+        self.assertTrue(two_site[1] == 6)
+
+
+class TestRandomSequenceGenerator(unittest.TestCase):
+    terminals = ["K", "R"]
+    glycans = glycans.load_from_file()[:50]
+    const_modifications = [modification.Modification("Carbamidomethyl")]
+    var_modifications = [modification.Modification("Deamidation"), modification.Modification("Oxidation")]
+    tolerance = 10e-6
+
+    def test_generate(self):
+        target_mass = 4388.827053
+        builder = random_glycopeptide.RandomGlycopeptideBuilder(tolerance=self.tolerance, )
 
 class TestComposition(unittest.TestCase):
 

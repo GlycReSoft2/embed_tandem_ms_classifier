@@ -31,6 +31,7 @@ try:
     import theoretical_glycopeptide
     import match_ions2
     import postprocess2
+    import calculate_fdr
     from classify_matches import PrepareModelTask
     from classify_matches import ClassifyTargetWithModelTask
     from classify_matches import ModelDiagnosticsTask
@@ -55,10 +56,10 @@ def load_parameters_from_json(param_file):
 
 
 def generate_theoretical_ion_space(ms1_results_file, sites_file, constant_modifications, variable_modifications,
-                                   enzyme_info, n_processes):
+                                   enzyme_info, n_processes, out=None):
     try:
         path = theoretical_glycopeptide.main(ms1_results_file, sites_file, constant_modifications,
-                                             variable_modifications, enzyme_info, n_processes)
+                                             variable_modifications, enzyme_info, n_processes, output_file=out)
         return path
     except NoSitesFoundException, e:
         raise NoSitesFoundWrapperException(str(e))
@@ -109,19 +110,117 @@ def classify_data_by_model(
 
 def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra, model_file_path,
                                    method="full_random_forest", ms1_match_tolerance=1e-5, ms2_match_tolerance=2e-5,
-                                   out=None,  n_decoys=20, predicates=None, n_processes=6):
+                                   out=None,  n_decoys=20, predicates=None, random_only=False,
+                                   n_processes=6, prefix_len=0, suffix_len=1):
     try:
         predicates = predicates if predicates is not None else calculate_fdr.default_predicates()
         outfile_path = calculate_fdr.main(scored_matches_path=scored_predictions_file, decon_data=deconvoluted_spectra,
                                           model_file_path=model_file_path, decoy_matches_path=None,
                                           outfile_path=out, num_decoys_per_real_mass=n_decoys,
-                                          predicate_fns=predicates, prefix_len=0, suffix_len=0, by_mod_sig=False,
+                                          predicate_fns=predicates, prefix_len=prefix_len, suffix_len=suffix_len,
+                                          by_mod_sig=False, random_only=random_only,
                                           ms1_tolerance=ms1_match_tolerance, ms2_tolerance=ms2_match_tolerance,
-                                          method="full_random_forest", method_init_args=None,
+                                          method=method, method_init_args=None,
                                           method_fit_args=None, n_processes=n_processes)
         return outfile_path
     except NameError, e:
-        pass
+        print(e)
+        raise
+
+
+def build_model_app_function(
+    ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
+    ms1_match_tolerance, ms2_match_tolerance,
+    constant_modification_list=None,
+    variable_modification_list=None, enzyme=None,
+    method="full_random_forest",
+    n_processes=4,
+        out=None):
+    theoretical_ion_space_file = generate_theoretical_ion_space(
+        ms1_results_file, glycosylation_sites_file,
+        constant_modification_list, variable_modification_list, enzyme,
+        out=out, n_processes=n_processes)
+    # print(theoretical_ion_space_file)
+    intermediary_files.append(theoretical_ion_space_file)
+    matched_ions_file = match_deconvoluted_ions(
+        theoretical_ion_space_file, deconvoluted_spectra_file,
+        ms1_match_tolerance, ms2_match_tolerance,
+        n_processes=n_processes)
+    # print(matched_ions_file)
+    intermediary_files.append(matched_ions_file)
+    postprocessed_ions_file = postprocess_matches(matched_ions_file)
+    # print(postprocessed_ions_file)
+    intermediary_files.append(postprocessed_ions_file)
+    model_file = prepare_model_file(
+        postprocessed_ions_file, method=method, out=out)
+    print(model_file)
+    return model_file
+
+
+def classify_with_model_app_function(
+    ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
+    ms1_match_tolerance, ms2_match_tolerance,
+    constant_modification_list=None, prefix_length=0, suffix_length=1,
+    variable_modification_list=None, enzyme=None,
+    method="full_random_forest", model_file=None,
+    n_processes=4, random_only=False, decoy_to_real_ratio=20,
+        out=None):
+    theoretical_ion_space_file = generate_theoretical_ion_space(
+        ms1_results_file, glycosylation_sites_file,
+        constant_modification_list, variable_modification_list,
+        enzyme, out=out, n_processes=n_processes)
+    # print(theoretical_ion_space_file)
+    intermediary_files.append(theoretical_ion_space_file)
+    matched_ions_file = match_deconvoluted_ions(
+        theoretical_ion_space_file, deconvoluted_spectra_file,
+        ms1_match_tolerance, ms2_match_tolerance,
+        n_processes=n_processes)
+    # print(matched_ions_file)
+    intermediary_files.append(matched_ions_file)
+    postprocessed_ions_file = postprocess_matches(matched_ions_file)
+    # print(postprocessed_ions_file)
+    intermediary_files.append(postprocessed_ions_file)
+    classification_results_file = classify_data_by_model(
+        postprocessed_ions_file, method=method,
+        model_file_path=model_file, out=out)
+    logger.info("Calculating FDR")
+    fdr_results_file = calculate_false_discovery_rate(
+        classification_results_file, deconvoluted_spectra_file, model_file,
+        method="full_random_forest", random_only=random_only, prefix_len=prefix_length,
+        suffix_len=suffix_length,
+        ms1_match_tolerance=ms1_match_tolerance, ms2_match_tolerance=ms2_match_tolerance,
+        out=None,  n_decoys=decoy_to_real_ratio, n_processes=n_processes)
+    print(fdr_results_file)
+    return fdr_results_file
+
+
+def reclassify_with_model_app_function(target_file, method="full_random_forest",
+                                       model_file=None, out=None, n_processes=6):
+    if out is None:
+        out = os.path.splitext(target_file)[0] + ".rescored"
+    classification_results_file = classify_data_by_model(
+        target_file, method=method,
+        model_file_path=model_file, out=out)
+    print(classification_results_file)
+    return classification_results_file
+
+
+def model_diagnostics_app_function(model_file, method="full_random_forest", **kwargs):
+    task = ModelDiagnosticsTask(model_file_path=model_file, method=method)
+    result = task.run()
+    print(result)
+    return result
+
+
+def calculate_fdr_app_function(scored_predictions_file, deconvoluted_spectra_file, model_file_path,
+                               decoy_to_real_ratio=20, random_only=False, method="full_random_forest",
+                               out=None, n_processes=6):
+    fdr_result = calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra_file, model_file_path,
+                                                method=method, ms1_match_tolerance=1e-5,
+                                                ms2_match_tolerance=2e-5, random_only=random_only,
+                                                out=out,  n_decoys=20, predicates=None, n_processes=n_processes)
+    print(fdr_result)
+    return fdr_result
 
 
 def clean_up_files(*files):
@@ -146,82 +245,6 @@ def uri_decode_list(uri_list=None):
     if uri_list is None:
         return None
     return map(uri_decode, uri_list)
-
-
-def build_model_app_function(
-    ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
-    ms1_match_tolerance, ms2_match_tolerance,
-    constant_modification_list=None,
-    variable_modification_list=None, enzyme=None,
-    method="full_random_forest",
-    n_processes=4,
-        out=None):
-    theoretical_ion_space_file = generate_theoretical_ion_space(
-        ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list, enzyme,
-        n_processes=n_processes)
-    # print(theoretical_ion_space_file)
-    intermediary_files.append(theoretical_ion_space_file)
-    matched_ions_file = match_deconvoluted_ions(
-        theoretical_ion_space_file, deconvoluted_spectra_file,
-        ms1_match_tolerance, ms2_match_tolerance,
-        n_processes=n_processes)
-    # print(matched_ions_file)
-    intermediary_files.append(matched_ions_file)
-    postprocessed_ions_file = postprocess_matches(matched_ions_file)
-    # print(postprocessed_ions_file)
-    intermediary_files.append(postprocessed_ions_file)
-    model_file = prepare_model_file(
-        postprocessed_ions_file, method=method, out=out)
-    print(model_file)
-    return model_file
-
-
-def classify_with_model_app_function(
-    ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
-    ms1_match_tolerance, ms2_match_tolerance,
-    constant_modification_list=None,
-    variable_modification_list=None, enzyme=None,
-    method="full_random_forest", model_file=None,
-    n_processes=4,
-        out=None):
-    theoretical_ion_space_file = generate_theoretical_ion_space(
-        ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list,
-        enzyme, n_processes=n_processes)
-    # print(theoretical_ion_space_file)
-    intermediary_files.append(theoretical_ion_space_file)
-    matched_ions_file = match_deconvoluted_ions(
-        theoretical_ion_space_file, deconvoluted_spectra_file,
-        ms1_match_tolerance, ms2_match_tolerance,
-        n_processes=n_processes)
-    # print(matched_ions_file)
-    intermediary_files.append(matched_ions_file)
-    postprocessed_ions_file = postprocess_matches(matched_ions_file)
-    # print(postprocessed_ions_file)
-    intermediary_files.append(postprocessed_ions_file)
-    classification_results_file = classify_data_by_model(
-        postprocessed_ions_file, method=method,
-        model_file_path=model_file, out=out)
-    print(classification_results_file)
-    return classification_results_file
-
-
-def reclassify_with_model_app_function(target_file, method="full_random_forest", model_file=None, out=None):
-    if out is None:
-        out = os.path.splitext(target_file)[0] + ".rescored.csv"
-    classification_results_file = classify_data_by_model(
-        target_file, method=method,
-        model_file_path=model_file, out=out)
-    print(classification_results_file)
-    return classification_results_file
-
-
-def model_diagnostics_app_function(model_file, method="full_random_forest", **kwargs):
-    task = ModelDiagnosticsTask(model_file_path=model_file, method=method)
-    result = task.run()
-    print(result)
-    return result
 
 
 def main():
@@ -313,6 +336,17 @@ def main():
     classify_with_model_app.add_argument("--out", action="store", default=None)
     classify_with_model_app.set_defaults(func=classify_with_model_app_function)
 
+    classify_with_model_app.add_argument("--decoy-to-real_ratio", action="store", default=20, type=int, help="Number of\
+        decoys per prediction sequence")
+    classify_with_model_app.add_argument("--random-only", action="store", default=False, type=bool, help="Don't\
+        generate shuffled decoys, only randomized sequences")
+    classify_with_model_app.add_argument("--prefix-length", default=0, required=False, type=int,
+                                         help="Length of peptide prefix to preserve when generating\
+                                          random glycopeptides by shuffling.")
+    classify_with_model_app.add_argument("--suffix-length", default=1, required=False, type=int,
+                                         help="Length of peptide suffix to preserve when generating\
+                                          random glycopeptides by shuffling.")
+
     reclassify_with_model_app = subparsers.add_parser(
         "reclassify-with-model", help="Rerun classification of an matched ion data file")
     reclassify_with_model_app.add_argument("--target-file", action="store", default=None, required=True,
@@ -362,8 +396,9 @@ def main():
         if param_file is not None:
             params = load_parameters_from_json(param_file)
             args.update(params)
+        logger.info(json.dumps(args, indent=4))
         if debug:
-            logger.info(json.dumps(args, indent=4))
+            pass
         else:
             #atexit.register(lambda: clean_up_files(*intermediary_files))
             pass

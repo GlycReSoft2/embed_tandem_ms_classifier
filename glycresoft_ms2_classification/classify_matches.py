@@ -1,6 +1,7 @@
 from os.path import splitext
 import numpy as np
 from matplotlib import pyplot as plt
+import logging
 
 from .prediction_tools import prepare_model_file, save_model_file
 from .prediction_tools import methods
@@ -14,7 +15,7 @@ from .utils import try_deserialize, try_get_outfile
 
 
 class ModelTask(object):
-
+    logger = logging.getLogger("ModelTask")
     '''Base Class for representing tasks ran about a model.'''
     method_table = methods
 
@@ -33,7 +34,7 @@ class ModelTask(object):
 
 
 class PrepareModelTask(ModelTask):
-
+    logger = logging.getLogger("ModelTask")
     def __init__(self, model_file_path, output_path=None, method="full_random_forest",
                  method_init_args=None, method_fit_args=None):
         if method_init_args is None:
@@ -41,8 +42,8 @@ class PrepareModelTask(ModelTask):
         if method_fit_args is None:
             method_fit_args = dict()
         if output_path is None:
-            output_path = try_get_outfile(model_file_path, "model")
-        self.output_path = output_path
+            output_path = try_get_outfile(model_file_path, "")
+        self.output_path = output_path + "model"
         super(PrepareModelTask, self).__init__(method)
         self.model_path = model_file_path
         self.model_frame = prepare_model_file(model_file_path)
@@ -59,13 +60,15 @@ class PrepareModelTask(ModelTask):
         self.output_path = out
 
     def run(self):
+        self.logger.info("Run starting")
         self.build_model()
         self.save_model()
+        self.logger.info("Run complete")
         return self.output_path
 
 
 class ClassifyTargetWithModelTask(ModelTask):
-
+    logger = logging.getLogger("ClassifyTargetWithModelTask")
     def __init__(
         self, model_file_path, target_file_path, output_path=None, method="full_random_forest",
             method_init_args=None, method_fit_args=None):
@@ -75,6 +78,8 @@ class ClassifyTargetWithModelTask(ModelTask):
             method_fit_args = dict()
         if output_path is None:
             output_path = try_get_outfile(target_file_path, "scored")
+        else:
+            output_path += ".scored"
         self.output_path = output_path
         super(ClassifyTargetWithModelTask, self).__init__(
             method, method_init_args, method_fit_args)
@@ -108,13 +113,16 @@ class ClassifyTargetWithModelTask(ModelTask):
         self.output_path = out
 
     def run(self):
+        self.logger.info("Run starting")
         self.build_model()
         self.classify_with_model()
         self.save_target()
+        self.logger.info("Run complete")
         return self.output_path
 
 
 class ModelDiagnosticsTask(ModelTask):
+    logger = logging.getLogger("ModelDiagnosticsTask")
 
     def __init__(
         self, model_file_path, method="full_random_forest",
@@ -198,16 +206,18 @@ class ModelDiagnosticsTask(ModelTask):
         pass
 
     def run(self):
+        self.logger.info("Run starting")
         self.build_model()
         self.prepare_figure()
         self.plot_feature_importance(self.axes[0])
         self.plot_error_rate(self.axes[1])
         self.save_figure()
+        self.logger.info("Run complete")
         return self.output_path
 
 
 class CompareModelsDiagnosticTask(ModelDiagnosticsTask):
-
+    logger = logging.getLogger("CompareModelsDiagnosticTask")
     def __init__(self, model_file_path, labeled_file_path, method="full_random_forest",
                  output_path=None, method_init_args=None, method_fit_args=None):
         if output_path is None:

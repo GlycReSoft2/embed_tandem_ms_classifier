@@ -152,6 +152,8 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     if output_file is None:
         #output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
         output_file = os.path.splitext(result_file)[0] + ".db"
+    else:
+        output_file += ".db"
     modification_table = RestrictedModificationTable.bootstrap(constant_modification_list, variable_modification_list)
     if constant_modification_list is None and variable_modification_list is None:
         modification_table = ModificationTable.bootstrap()
@@ -211,15 +213,6 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     pool.close()
     pool.join()
     logger.info("Hypothesis building complete")
-    # if output_file is not False:
-    #     logger.info("Writing sequences to file: %s", output_file)
-    #     fh = open(output_file + '.json', 'wb')
-    #     data = {
-    #         "metadata": metadata,
-    #         "theoretical_search_space": fragment_info
-    #     }
-    #     json.dump(data, fh)
-    #     fh.close()
 
     return output_file
 

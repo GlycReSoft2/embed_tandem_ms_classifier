@@ -2,14 +2,15 @@ from setuptools import setup, find_packages
 
 setup(
     name="GlycReSoft",
-    version="1.0.0c0dev",
+    version="1.0.1dev",
     packages=find_packages(),
     install_requires=[
         "scikit-learn >= 0.14.1",
         "pandas >= 0.14.0",
         "pyyaml >= 3.11",
         "pyteomics >= 2.5",
-        "sqlitedict >= 1.1.0"
+        "sqlitedict >= 1.1.0",
+        "numexpr  >= 2.1"
     ],
     zip_safe=False,
     include_package_data=True,

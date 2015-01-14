@@ -254,7 +254,7 @@ class PredictionResultsJSONEncoder(json.JSONEncoder):
         if isinstance(o, pd.DataFrame):
             return json.loads(o.to_json(orient="records"))
         else:
-            return json.JSONEncoder.default(self, o)
+            return super(PredictionResultsJSONEncoder, self).default(o)
 
 
 class IndirectIndexer(object):

@@ -1,8 +1,11 @@
 import json
 import sqlitedict
-from .structure import glycans as glycan_lib
-from .utils import try_get_outfile
-from .prediction_tools import PredictionResults
+
+from glycresoft_ms2_classification.structure import glycans as glycan_lib
+from glycresoft_ms2_classification.utils import try_get_outfile
+import logging
+logging.basicConfig(level="DEBUG")
+logger = logging.getLogger(__name__)
 
 
 def main(db_file, output_file=None):
@@ -11,15 +14,17 @@ def main(db_file, output_file=None):
     :param db_file: Path to file created by match_ions.py, matching theoretical ions to observed spectra
     :param output_file: Path to file to write results to. Defaults to `db_file` + ".processed"
     '''
-    if output_file is None:
-        output_file = try_get_outfile(db_file, "processed")
     matched_ions = sqlitedict.SqliteDict(db_file, tablename="matched_ions")
     scored_results = []
     did_not_match = []
     metadata = sqlitedict.SqliteDict(db_file, tablename="metadata")
     metadata['db_file_name'] = db_file
     glycan_identities = metadata["glycan_identities"]
-
+    if output_file is None:
+        output_file = try_get_outfile(db_file, "processed")
+    else:
+        output_file += ".processed"
+    logger.info("Output file %s", output_file)
     for row in matched_ions.values():
         total_bare_b = float(row["total_b_ions"])
 
@@ -102,15 +107,16 @@ def main(db_file, output_file=None):
                                    })
         else:
             did_not_match.append(row["Glycopeptide_identifier"])
-
     results = {
         "metadata": dict(metadata),
         "predictions": scored_results,
         "intact_mass_no_fragments": did_not_match
     }
+
     if output_file:
         f = open(output_file + ".json", 'wb')
-        json.dump(results, f)
+        for chunk in json.JSONEncoder().iterencode(results):
+            f.write(chunk)
         f.close()
         return (output_file + '.json', results)
     else:
@@ -120,3 +126,6 @@ def main(db_file, output_file=None):
 def taskmain():
     import sys
     main(sys.argv[1])
+
+if __name__ == '__main__':
+    taskmain()
