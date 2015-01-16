@@ -69,6 +69,7 @@ class PrepareModelTask(ModelTask):
 
 class ClassifyTargetWithModelTask(ModelTask):
     logger = logging.getLogger("ClassifyTargetWithModelTask")
+
     def __init__(
         self, model_file_path, target_file_path, output_path=None, method="full_random_forest",
             method_init_args=None, method_fit_args=None):
@@ -83,13 +84,14 @@ class ClassifyTargetWithModelTask(ModelTask):
         self.output_path = output_path
         super(ClassifyTargetWithModelTask, self).__init__(
             method, method_init_args, method_fit_args)
-        self.model_path = model_file_path
-        self.model_frame = prepare_model_file(model_file_path)
+        if method != "naive":
+            self.model_path = model_file_path
+            self.model_frame = prepare_model_file(model_file_path)
+            self.model_formula, self.classifier_fn = ClassifyTargetWithModelTask.method_table[
+                self.method]
+            self.model_formula = model_definitions[self.model_formula]
         self.target_path = target_file_path
         self.target_frame = prepare_model_file(target_file_path)
-        self.model_formula, self.classifier_fn = ClassifyTargetWithModelTask.method_table[
-            self.method]
-        self.model_formula = model_definitions[self.model_formula]
         self.classifier = None
 
     def build_model(self):
@@ -99,25 +101,31 @@ class ClassifyTargetWithModelTask(ModelTask):
             model_fit_args=self.method_fit_args)
 
     def classify_with_model(self):
-        scores = classify_with_model(
-            self.classifier, self.target_frame, self.model_formula)
+        scores = None
+        if self.method != "naive":
+            scores = classify_with_model(
+                self.classifier, self.target_frame, self.model_formula)
+        else:
+            scores = 1
         self.target_frame["noise_filter"] = scores
-        self.target_frame["MS2_Score"] = scores * (((self.target_frame.meanCoverage +
-                                                     self.target_frame.meanHexNAcCoverage) / 2.0)
-                                                   - self.target_frame.percentUncovered)
+        self.target_frame["MS2_Score"] = scores * self.target_frame.score_naive()
         self.target_frame = determine_ambiguity(self.target_frame)
-        self.target_frame['call'] = scores > 0.5
+        self.target_frame['call'] = self.target_frame["MS2_Score"] > 0.5
 
     def save_target(self):
         out = save_model_file(self.target_frame, self.output_path)
         self.output_path = out
 
-    def run(self):
+    def run(self, save=True):
         self.logger.info("Run starting")
-        self.build_model()
+        if self.method != "naive":
+            self.build_model()
         self.classify_with_model()
-        self.save_target()
+        if save:
+            self.save_target()
         self.logger.info("Run complete")
+        if not save:
+            return self.target_frame
         return self.output_path
 
 

@@ -1,4 +1,3 @@
-import functools
 import logging
 logger = logging.getLogger(__name__)
 
@@ -7,36 +6,9 @@ import numpy as np
 from glycresoft_ms2_classification import classify_matches
 from glycresoft_ms2_classification import match_ions2
 from glycresoft_ms2_classification import postprocess2
-
+from glycresoft_ms2_classification.classify_matches import ClassifyTargetWithModelTask
 from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import make_decoys
-from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import parameter_search_optimizer
-
-
-# Filter Predicate Logic
-# Used to construct compositions of multi-dimension filter functions.
-# Next time, use pandas.DataFrame.query
-def make_predicate(**kwargs):
-    fn = functools.partial(predicate_base, **kwargs)
-    setattr(fn, "sig", kwargs)
-    return fn
-
-
-def and_predicate(predicate, other):
-    fn = lambda x: predicate(x) and other(x)
-    setattr(fn, "sig", {"op": "and", "a": predicate.sig, "b": other.sig})
-    return fn
-
-
-def or_predicate(predicate, other):
-    fn = lambda x: predicate(x) or other(x)
-    setattr(fn, "sig", {"op": "or", "a": predicate.sig, "b": other.sig})
-    return fn
-
-
-def negate_predicate(predicate):
-    fn = lambda x: not predicate(x)
-    setattr(fn, "sig", {"op": "not", "a": predicate.sig})
-    return fn
+from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import parameter_search_optimizer as optimize_fdr
 
 
 def predicate_base(x, MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0,
@@ -101,7 +73,7 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
 
 def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_matches_path=None,
          outfile_path=None, num_decoys_per_real_mass=20.0, random_only=False,
-         predicate_fns=(make_predicate(MS2_Score=0.5),), prefix_len=0, suffix_len=0, by_mod_sig=False,
+         predicate_fns=None, prefix_len=0, suffix_len=0, by_mod_sig=False,
          ms1_tolerance=1e-5, ms2_tolerance=2e-5, method="full_random_forest", method_init_args=None,
          method_fit_args=None, n_processes=6):
     '''
@@ -116,7 +88,8 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
         :param outfile_path str: defaults to scored_matches_path[:-4] + "_fdr.json" will contain the
         resulting FDR statistic for each cutoff.
     '''
-
+    scored_matches_frame = None
+    decoy_matches_frame = None
     if outfile_path is None:
         outfile_path = scored_matches_path[:-5] + "_fdr.json"
     if decon_data is not None and model_file_path is not None:
@@ -126,55 +99,37 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
             num_decoys_per_real_mass=num_decoys_per_real_mass, random_only=random_only,
             method=method, method_init_args=method_init_args, method_fit_args=method_fit_args,
             n_processes=n_processes)
-    scored_matches_frame = classify_matches.prepare_model_file(
-        scored_matches_path)
-    decoy_matches_frame = classify_matches.prepare_model_file(
-        decoy_matches_path)
-    results = []
+        decoy_matches_frame = classify_matches.prepare_model_file(
+            decoy_matches_path)
+    elif model_file_path is not None and decoy_matches_path is not None:
+        scored_matches_frame = ClassifyTargetWithModelTask(
+            model_file_path, scored_matches_path, method=method).run(False)
+        decoy_matches_frame = ClassifyTargetWithModelTask(
+            model_file_path, decoy_matches_path, method=method).run(False)
+    else:
+        scored_matches_frame = classify_matches.prepare_model_file(
+            scored_matches_path)
+        decoy_matches_frame = classify_matches.prepare_model_file(
+            decoy_matches_path)
     logger.info("Evaluating predicates")
-    for predicate in predicate_fns:
-        # Modification Group Specific
-        if by_mod_sig:
-            for mod_signature in set(scored_matches_frame.modificationSignature):
-                scored = scored_matches_frame.modificationSignature == mod_signature
-                decoy = decoy_matches_frame.modificationSignature == mod_signature
-                results_obj = calculate_fdr(
-                    scored_matches_frame.ix[scored], decoy_matches_frame.ix[decoy],
-                    predicate, num_decoys_per_real_mass)
-                if results_obj is None:
-                    continue
-                results_obj['modification_signature'] = mod_signature
-                results.append(results_obj)
-        # Overall
-        results_obj = calculate_fdr(
-            scored_matches_frame, decoy_matches_frame,
-            predicate, num_decoys_per_real_mass)
-        if results_obj is None:
-            continue
-        results_obj['modification_signature'] = "*"
-        results.append(results_obj)
+    fdr_search = optimize_fdr.CountExclusion(
+        scored_matches_frame, decoy_matches_frame,
+        decoy_matches_frame.metadata["decoy_ratio"], ["MS2_Score", "peptideLens", "numStubs"])
+    fdr_search.optimize()
 
-    scored_matches_frame.metadata["fdr"] = results
+    scored_matches_frame.metadata["fdr"] = fdr_search.compress()
+    scored_matches_frame["call"] = scored_matches_frame.Glycopeptide_identifier.isin(
+        scored_matches_frame.kvquery().Glycopeptide_identifier)
+    logger.info("Accepted %d predictions with FDR %f",
+                scored_matches_frame.call.sum(),
+                scored_matches_frame.optimize_fdr().iloc[0]["false_discovery_rate"])
     scored_matches_frame.serialize(outfile_path)
 
     return outfile_path
 
 
 def default_predicates():
-    predicates = [make_predicate(MS2_Score=i)
-                  for i in list(np.arange(0, 1, .05))]
-    predicates.extend([make_predicate(MS2_Score=i, numStubs=1)
-                       for i in list(np.arange(0, 1, .05))])
-    predicates.extend([make_predicate(MS2_Score=i, peptideLens=10)
-                       for i in list(np.arange(0, 1, .05))])
-    predicates.extend([and_predicate(make_predicate(MS2_Score=i),
-                       negate_predicate(make_predicate(peptideLens=10)))
-                       for i in list(np.arange(0, 1, .05))])
-    predicates.extend([make_predicate(
-        MS2_Score=i, peptideLens=10, numStubs=1) for i in list(np.arange(0, 1, .05))])
-    predicates.extend([make_predicate(
-        MS2_Score=i, numStubs=1, meanHexNAcCoverage=.5) for i in list(np.arange(0, 1, .05))])
-
+    predicates = None
     return predicates
 
 

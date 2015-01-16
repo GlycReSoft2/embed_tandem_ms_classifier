@@ -103,7 +103,7 @@ def random_glycopeptide_to_fragments(sequence_record):
     loc_rules = modification.get_position_modifier_rules_dict(seq_obj)
     for i, (aa, mods) in enumerate(seq_obj):
         for mod in mods:
-            if "Glycan" in mod.name:
+            if "Glycan" in mod.name or "HexNAc" in mod.name:
                 glycan_map[i] = mod.name
             else:
                 # Construct the set of acceptable reasons why this modification is here.
@@ -160,9 +160,10 @@ def random_glycopeptide_to_fragments(sequence_record):
                 y_ions.append({"key": key, "mass": mass})
 
     peptide_seq = strip_modifications(seq_obj.get_sequence())
-    pep_stubs = StubGlycopeptide(peptide_seq, None,
+    pep_stubs = StubGlycopeptide(peptide_seq, glycan_composition_restring,
                                  len(glycosylation_sites), glycan_composition_restring)
     stub_ions = pep_stubs.get_stubs()
+    assert len(stub_ions) > 1
     oxonium_ions = pep_stubs.get_oxonium_ions()
     ions = {
         "MS1_Score": sequence_record.MS1_Score,
@@ -199,7 +200,7 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
     metadata = copy.deepcopy(metadata)
     metadata["tag"] = (metadata["tag"] if metadata["tag"] not in {"", None} else "") + "decoy"
     metadata["decoy_ratio"] = count
-    pool = multiprocessing.Pool(n_processes)
+
     decoy_logger.info("Saving metadata")
     metadata_store = sqlitedict.SqliteDict(decoy_path, tablename="metadata")
     metadata_store.update(metadata)
@@ -229,11 +230,17 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
                                                  tablename="theoretical_search_space")
     total_missing = 0
     preds_missed = []
+    pool = None
+    if n_processes > 1:
+        pool = multiprocessing.Pool(n_processes)
+        dispatcher = functools.partial(pool.imap_unordered, chunksize=1000)
+    else:
+        dispatcher = itertools.imap
     i = 0
     pred_iter = 0
     for decoy_tuple in (
         itertools.chain.from_iterable(
-            pool.imap_unordered(task_fn, predictions.iterrows(), chunksize=100))):
+            dispatcher(task_fn, predictions.iterrows()))):
         decoys, missing = decoy_tuple
         for decoy in decoys:
             decoy_sequence_store[i] = decoy
@@ -245,8 +252,9 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
             decoy_logger.info("%d missing", missing)
             preds_missed.append((predictions.ix[pred_iter].Glycopeptide_identifier, missing))
         pred_iter += 1
-    pool.close()
-    pool.join()
+    if pool is not None:
+        pool.close()
+        pool.join()
     decoy_sequence_store.commit()
     decoy_sequence_store.close()
     metadata_store["total_missing_decoys"] = total_missing
@@ -266,4 +274,4 @@ app.add_argument("-r", "--random-only", action="store_true")
 if __name__ == '__main__':
     import sys
     logging.basicConfig(level="DEBUG")
-    taskmain(sys.argv[1], 0, 1, 20, 4)
+    taskmain(sys.argv[1], 0, 1, 20, 1)

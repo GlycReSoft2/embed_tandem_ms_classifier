@@ -11,7 +11,7 @@ import numpy as np
 from .sequence_handling import get_sequence_length, compute_ion_coverage_map
 from .sequence_handling import modification_signature
 from .sequence_handling import find_occupied_glycosylation_sites
-from .sequence_handling import percent_expected_ions_with_hexnac_observed
+from .sequence_handling import stubs_observed_expected_ratio
 
 from ..structure import sequence
 from ..structure import modification
@@ -249,8 +249,20 @@ def filter_tandem_matches_by_ppm(row, ms2_tolerance):
     return row
 
 
+def query_threshold(MS2_Score=0, meanCoverage=0, meanHexNAcCoverage=0, percentUncovered=1, MS1_Score=0,
+                    peptideLens=0, Obs_Mass=0, numStubs=-1):
+    query_string = "(MS2_Score >= {MS2_Score} and  meanCoverage >= {meanCoverage} and\
+     meanHexNAcCoverage >= {meanHexNAcCoverage} and \
+     percentUncovered <= {percentUncovered} and  peptideLens >= {peptideLens}\
+     and  Obs_Mass >= {Obs_Mass}\
+     and  numStubs >= {numStubs})".format(**locals())
+    return query_string
+
+
 class PredictionResultsJSONEncoder(json.JSONEncoder):
+
     ''' '''
+
     def default(self, o):
         if isinstance(o, pd.DataFrame):
             return json.loads(o.to_json(orient="records"))
@@ -259,9 +271,11 @@ class PredictionResultsJSONEncoder(json.JSONEncoder):
 
 
 class IndirectIndexer(object):
+
     '''A stubby front-end to mimic the DataFrame indexer components like .ix[],
     .loc[], and such. Since these use __getitem__ and __setitem__ to do their
     work rather than direct function calls, must use an object'''
+
     def __init__(self, wrapped_indexer_getter, wrapped_indexer_setter):
         self.wrapped_indexer_getter = wrapped_indexer_getter
         self.wrapped_indexer_setter = wrapped_indexer_setter
@@ -274,6 +288,7 @@ class IndirectIndexer(object):
 
 
 class PredictionResults(object):
+
     '''An extension-by-composition of pandas.DataFrame, carrying a dictionary of
     arbitrary metadata as well as a DataFrame of arbitrary values. Attempts to cover
     most basic use-cases, forwarding all attribute requests not satisfied by the wrapping
@@ -327,12 +342,14 @@ class PredictionResults(object):
                 raise AttributeError(
                     "Prediction Results has no attribute {attr}".format(attr=name))
 
-    # def __setattr__(self, name, value):
-    #     try:
-    #         object.__getattribute__(self, name)
-    #         object.__setattr__(self, name, value)
-    #     except:
-    #         self[name] = value
+    def __setattr__(self, name, value):
+        if hasattr(self, "predictions"):
+            if name in self:
+                self[name] = value
+            else:
+                object.__setattr__(self, name, value)
+        else:
+            object.__setattr__(self, name, value)
 
     def __repr__(self):
         rep = "<PredictionResults>\n{frame}".format(frame=repr(self.predictions))
@@ -381,17 +398,33 @@ class PredictionResults(object):
             out = PredictionResults(self.metadata, out)
         return out
 
-    def score_naive(self, peptide_weight=0.5, hexnac_weight=0.5, uncovered_penalty_weight=1.0):
+    def score_naive(self, peptide_weight=0.5, hexnac_weight=0.5,
+                    uncovered_penalty_weight=1.0, stub_ion_weight=0.2,
+                    backbone_fragment_weight=0.8):
         if (peptide_weight + hexnac_weight) != 1.0:
             raise ValueError("Peptide and HexNAc Weights must sum to 1.0")
-        return (self.meanCoverage * peptide_weight) + (self.meanHexNAcCoverage * hexnac_weight) \
-            - (uncovered_penalty_weight * self.percentUncovered)
+        backbone_fragment_score = (self.meanCoverage * peptide_weight) +\
+            (self.meanHexNAcCoverage * hexnac_weight) -\
+            (uncovered_penalty_weight * self.percentUncovered)
+        score = (backbone_fragment_score * backbone_fragment_weight) +\
+            (stub_ion_weight * self.stubsObservedVsExpected)
+        return score
 
-    def optimize_fdr(self):
+    def optimize_fdr(self, n=1):
         if "fdr" not in self.metadata:
             raise KeyError("The FDR has not been calculated")
         fdr = self.metadata.get("fdr")
-        return fdr.ix[fdr.query("false_discovery_rate <= 0.05").num_real_matches.idxmax()]
+        # return fdr.ix[fdr.query("false_discovery_rate <= 0.05").num_real_matches.idxmax()]
+        return fdr.query("false_discovery_rate <= 0.05").sort(
+            ["num_real_matches"], ascending=False).iloc[:n]
+
+    def kvquery(self, frame=None):
+        if frame is None:
+            frame = self.optimize_fdr()
+        args = {k: v for k, v in frame.to_dict(orient="records")[0].items()
+                if k not in {"false_discovery_rate", "num_real_matches", "num_decoy_matches"}}
+        print(args)
+        return self.query(query_threshold(**args))
 
     def serialize(self, target_buffer=None, close=True):
         if target_buffer is None:
@@ -472,6 +505,8 @@ class PredictionResults(object):
             modification_signature(data)
         if "glycanMass" not in data or recompute:
             infer_glycan_mass(data)
+        if "stubsObservedVsExpected" not in data or recompute:
+            data["stubsObservedVsExpected"] = data.apply(stubs_observed_expected_ratio, 1)
         return data
 
 
@@ -528,7 +563,6 @@ class PredictionResultsSqlite(sqlitedict.SqliteDict):
     def __iter__(self):
         for i, row in self.items():
             yield pd.Series(row)
-
 
 
 def convert_csv_to_nested(path):

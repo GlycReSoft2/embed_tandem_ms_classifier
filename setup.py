@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="GlycReSoft",
-    version="1.0.1dev",
+    version="1.0.2",
     packages=find_packages(),
     install_requires=[
         "scikit-learn >= 0.14.1",
@@ -10,7 +10,8 @@ setup(
         "pyyaml >= 3.11",
         "pyteomics >= 2.5",
         "sqlitedict >= 1.1.0",
-        "numexpr  >= 2.1"
+        "numexpr  >= 2.1",
+        "xray >= 0.3.2"
     ],
     zip_safe=False,
     include_package_data=True,

@@ -197,7 +197,7 @@ class TestRandomSequenceGenerator(unittest.TestCase):
 
     def test_generate(self):
         target_mass = 4388.827053
-        builder = random_glycopeptide.RandomGlycopeptideBuilder(tolerance=self.tolerance, )
+        builder = random_glycopeptide.RandomGlycopeptideBuilder(ppm_error=self.tolerance, glycans=self.glycans, )
 
 class TestComposition(unittest.TestCase):
 

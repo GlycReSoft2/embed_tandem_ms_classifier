@@ -1,12 +1,12 @@
 import os
 import logging
 logfile = os.path.expanduser("~/.glycresoft-log")
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
 fh = logging.FileHandler(logfile, mode='w')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
-logger.addHandler(logging.StreamHandler())
+#logger.addHandler(logging.StreamHandler())
 
 import atexit
 import json
@@ -108,14 +108,15 @@ def classify_data_by_model(
         raise ClassificationException(str(e))
 
 
-def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra, model_file_path,
+def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra=None, model_file_path=None,
+                                   decoy_matches_path=None,
                                    method="full_random_forest", ms1_match_tolerance=1e-5, ms2_match_tolerance=2e-5,
                                    out=None,  n_decoys=20, predicates=None, random_only=False,
                                    n_processes=6, prefix_len=0, suffix_len=1):
     try:
         predicates = predicates if predicates is not None else calculate_fdr.default_predicates()
         outfile_path = calculate_fdr.main(scored_matches_path=scored_predictions_file, decon_data=deconvoluted_spectra,
-                                          model_file_path=model_file_path, decoy_matches_path=None,
+                                          model_file_path=model_file_path, decoy_matches_path=decoy_matches_path,
                                           outfile_path=out, num_decoys_per_real_mass=n_decoys,
                                           predicate_fns=predicates, prefix_len=prefix_len, suffix_len=suffix_len,
                                           by_mod_sig=False, random_only=random_only,
@@ -123,7 +124,7 @@ def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra
                                           method=method, method_init_args=None,
                                           method_fit_args=None, n_processes=n_processes)
         return outfile_path
-    except NameError, e:
+    except Exception, e:
         print(e)
         raise
 
@@ -185,7 +186,8 @@ def classify_with_model_app_function(
         model_file_path=model_file, out=out)
     logger.info("Calculating FDR")
     fdr_results_file = calculate_false_discovery_rate(
-        classification_results_file, deconvoluted_spectra_file, model_file,
+        classification_results_file, deconvoluted_spectra=deconvoluted_spectra_file,
+        model_file_path=model_file,
         method="full_random_forest", random_only=random_only, prefix_len=prefix_length,
         suffix_len=suffix_length,
         ms1_match_tolerance=ms1_match_tolerance, ms2_match_tolerance=ms2_match_tolerance,
@@ -212,13 +214,24 @@ def model_diagnostics_app_function(model_file, method="full_random_forest", **kw
     return result
 
 
-def calculate_fdr_app_function(scored_predictions_file, deconvoluted_spectra_file, model_file_path,
-                               decoy_to_real_ratio=20, random_only=False, method="full_random_forest",
+def calculate_fdr_app_function(predictions_file, model_file=None, decoys_file=None,
+                               deconvoluted_spectra_file=None, prefix_length=0, suffix_length=0,
+                               decoy_to_real_ratio=20, method="full_random_forest",
+                               predicate_fns=None, random_only=False,
                                out=None, n_processes=6):
-    fdr_result = calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra_file, model_file_path,
-                                                method=method, ms1_match_tolerance=1e-5,
-                                                ms2_match_tolerance=2e-5, random_only=random_only,
-                                                out=out,  n_decoys=20, predicates=None, n_processes=n_processes)
+    if (decoys_file is None and deconvoluted_spectra_file is None) or\
+       (deconvoluted_spectra_file is not None and model_file is None):
+        print("You must either specify a file containing pre-computed and matched decoys (--decoy-file), \
+or a deconvoluted tandem spectra file and model to match and score newly generated decoys with\
+ (--deconvoluted-spectra-file, --model-file).")
+
+    fdr_result = calculate_false_discovery_rate(predictions_file, model_file_path=model_file,
+                                                decoy_matches_path=decoys_file,
+                                                deconvoluted_spectra=deconvoluted_spectra_file,
+                                                method=method, out=out, n_decoys=decoy_to_real_ratio,
+                                                random_only=random_only, prefix_len=prefix_length,
+                                                suffix_len=suffix_length,
+                                                predicates=None, n_processes=n_processes)
     print(fdr_result)
     return fdr_result
 
@@ -267,8 +280,9 @@ def main():
     build_model_app.add_argument(
         "--glycosylation-sites-file", action="store", required=True)
 
-    build_model_app.add_argument("-e", "--enzyme", action="store", help="Name of the enzyme used")
-    build_model_app.add_argument("-p", "--protein_prospector_xml", action="store", help="path to msdgist XML file.\
+    build_model_app.add_argument(
+        "-e", "--enzyme", action="store", help="Name of the enzyme used")
+    build_model_app.add_argument("-p", "--protein-prospector-xml", action="store", help="path to msdgist XML file.\
      Instead of --enzyme,--constant_modifications and --variable_modifications")
 
     build_model_app.add_argument(
@@ -322,21 +336,20 @@ def main():
         "--ms2-match-tolerance", type=float, action="store",
         default=match_ions2.ms2_tolerance_default,
         help="Mass Error Tolerance for matching MS2 masses in PPM")
-    classify_with_model_app.add_argument("--protein-prospector-xml", default=None, help="Parse out modification\
-                                 information form the Protein Prospector XML output")
     classify_with_model_app.add_argument(
         "--constant-modification-list", type=str, action="append", default=None,
         help="Pass the list of constant modifications to include in the sequence search space")
     classify_with_model_app.add_argument(
         "--variable-modification-list", type=str, action="append", default=None,
         help="Pass the list of variable modifications to include in the sequence search space")
-    classify_with_model_app.add_argument("-e", "--enzyme", action="store", help="Name of the enzyme used")
-    classify_with_model_app.add_argument("-p", "--protein_prospector_xml", action="store", help="path to msdgist\
+    classify_with_model_app.add_argument(
+        "-e", "--enzyme", action="store", help="Name of the enzyme used")
+    classify_with_model_app.add_argument("-p", "--protein-prospector-xml", action="store", help="path to msdgist\
                                 XML file. Instead of --enzyme,--constant_modifications and --variable_modifications")
     classify_with_model_app.add_argument("--out", action="store", default=None)
     classify_with_model_app.set_defaults(func=classify_with_model_app_function)
 
-    classify_with_model_app.add_argument("--decoy-to-real_ratio", action="store", default=20, type=int, help="Number of\
+    classify_with_model_app.add_argument("--decoy-to-real-ratio", action="store", default=20, type=int, help="Number of\
         decoys per prediction sequence")
     classify_with_model_app.add_argument("--random-only", action="store", default=False, type=bool, help="Don't\
         generate shuffled decoys, only randomized sequences")
@@ -357,7 +370,8 @@ def main():
         help="Select the model method to use for classification")
     reclassify_with_model_app.add_argument("--model-file",
                                            action="store", default=None, required=True)
-    reclassify_with_model_app.set_defaults(func=reclassify_with_model_app_function)
+    reclassify_with_model_app.set_defaults(
+        func=reclassify_with_model_app_function)
 
     model_diagnostics_app = subparsers.add_parser(
         "model-diagnostics", help="Given a labeled model, calculate model diagnostics")
@@ -368,10 +382,36 @@ def main():
     model_diagnostics_app.add_argument("--model-file",
                                        action="store", default=None, required=True)
     model_diagnostics_app.set_defaults(func=model_diagnostics_app_function)
+
+    calculate_fdr_app = subparsers.add_parser("calculate-fdr", help="Given a set of predictions from a collection\
+     of data, estimate the false discovery rate")
+    calculate_fdr_app.add_argument("--predictions-file", required=True, help="Path to predictions file generated by\
+     classify-with-model, build-model, or reclassify-with-model")
+    calculate_fdr_app.add_argument(
+        "--deconvoluted-spectra-file", action="store", default=None)
+    calculate_fdr_app.add_argument(
+        "--method", action="store", default="full_random_forest",
+        choices=set(ModelDiagnosticsTask.method_table),
+        help="Select the model method to use for classification")
+    calculate_fdr_app.add_argument(
+        "--decoys-file", default=None, help="A file containing precomputed decoy sequence matches")
+    calculate_fdr_app.add_argument("--deconvoluted-spectra_file")
+    calculate_fdr_app.add_argument("--decoy-to-real-ratio", action="store", default=20, type=int, help="Number of\
+        decoys per prediction sequence")
+    calculate_fdr_app.add_argument("--random-only", action="store", default=False, type=bool, help="Don't\
+        generate shuffled decoys, only randomized sequences")
+    calculate_fdr_app.add_argument("--prefix-length", default=0, required=False, type=int,
+                                   help="Length of peptide prefix to preserve when generating\
+                                          random glycopeptides by shuffling.")
+    calculate_fdr_app.add_argument("--suffix-length", default=1, required=False, type=int,
+                                   help="Length of peptide suffix to preserve when generating\
+                                          random glycopeptides by shuffling.")
+    calculate_fdr_app.add_argument("--model-file",
+                                   action="store", default=None, required=False)
+    calculate_fdr_app.add_argument("--out", action="store", default=None)
+    calculate_fdr_app.set_defaults(func=calculate_fdr_app_function)
+
     try:
-        # Always generate an error map file on run, for sanity's sake. But users may not have write-access
-        # to the install directory. Need to use tempfile or other source?
-        # error_map_file = ErrorCodingMeta.build_error_code_map()
         args = app.parse_args()
         args = args.__dict__
         func = args.pop("func")
@@ -387,8 +427,10 @@ def main():
 
         if 'protein_prospector_xml' in args and args["protein_prospector_xml"] is not None:
             ms_digest = MSDigestParamters.parse(args["protein_prospector_xml"])
-            args["constant_modification_list"] = ms_digest.constant_modifications
-            args["variable_modification_list"] = ms_digest.variable_modifications
+            args[
+                "constant_modification_list"] = ms_digest.constant_modifications
+            args[
+                "variable_modification_list"] = ms_digest.variable_modifications
             args["enzyme"] = ms_digest.enzyme
         args.pop("protein_prospector_xml", None)
 

@@ -14,9 +14,9 @@ model_definitions = {
     "full": [
         "meanCoverage",
         "percentUncovered",
-        #"ppm_error",
         "meanHexNAcCoverage",
-        "peptideLens"
+        "peptideLens",
+        "stubsObservedVsExpected"
     ],
     "backbone_hexnac": [
         "meanHexNAcCoverage",
@@ -96,6 +96,7 @@ fitting_functions.extend(
 methods = OrderedDict()
 for model_name, fitter in itertools.product(model_definitions.keys(), fitting_functions):
     methods["%s_%s" % (model_name, fitter.func_name.replace("fit_", ""))] = (model_name, fitter)
+methods['naive'] = ("naive", "naive")
 
 
 def classify_with_model(classifier, data_struct, formula=None):

@@ -4,7 +4,6 @@ import random
 import re
 import logging
 logger = logging.getLogger("random_sequence_builder")
-logger.setLevel("INFO")
 from math import fabs
 
 
@@ -102,12 +101,9 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
                                for g in glycans),
                     generate_n_linked_sequons()
                     )
-        )
-        )
+            )
+            )
     )
-
-    logger.debug(components)
-    logger.debug(sequons)
 
     loc_fabs = fabs
     water = Composition("H2O").mass
@@ -151,8 +147,8 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
 
             error = loc_fabs(
                 (target_mass - padded_sequence.mass) / float(target_mass))
-            logger.debug("%s, %s, %s" %
-                         (padded_sequence, padded_sequence.mass, error))
+            # logger.debug("%s, %s, %s" %
+            #              (padded_sequence, padded_sequence.mass, error))
             # Accept?
             if error <= ppm_error:
                 logger.debug("Accepting %s %s" %
