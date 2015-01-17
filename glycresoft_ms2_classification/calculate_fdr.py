@@ -74,7 +74,7 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
 def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_matches_path=None,
          outfile_path=None, num_decoys_per_real_mass=20.0, random_only=False,
          predicate_fns=None, prefix_len=0, suffix_len=0, by_mod_sig=False,
-         ms1_tolerance=1e-5, ms2_tolerance=2e-5, method="full_random_forest", method_init_args=None,
+         ms1_tolerance=None, ms2_tolerance=None, method="full_random_forest", method_init_args=None,
          method_fit_args=None, n_processes=6):
     '''
         Call with deconvolution results and a model to generate decoys and score them, or with
@@ -88,8 +88,13 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
         :param outfile_path str: defaults to scored_matches_path[:-4] + "_fdr.json" will contain the
         resulting FDR statistic for each cutoff.
     '''
-    scored_matches_frame = None
+    scored_matches_frame = classify_matches.prepare_model_file(scored_matches_path)
     decoy_matches_frame = None
+    if ms1_tolerance is None:
+        ms1_tolerance = scored_matches_frame.metadata["ms1_tolerance"]
+    if ms2_tolerance is None:
+        ms2_tolerance = scored_matches_frame.metadata["ms2_tolerance"]
+
     if outfile_path is None:
         outfile_path = scored_matches_path[:-5] + "_fdr.json"
     if decon_data is not None and model_file_path is not None:

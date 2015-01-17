@@ -151,8 +151,8 @@ def generate_random_glycopeptides(target_mass, ppm_error=10e-6, count=20, consta
             #              (padded_sequence, padded_sequence.mass, error))
             # Accept?
             if error <= ppm_error:
-                logger.debug("Accepting %s %s" %
-                             (padded_sequence, padded_sequence.mass))
+                #logger.debug("Accepting %s %s" %
+                #             (padded_sequence, padded_sequence.mass))
                 solutions.add(str(padded_sequence))
 
         # Reset, too big?
@@ -404,14 +404,14 @@ class RandomGlycopeptideBuilder(object):
 
                 error = loc_fabs(
                     (target_mass - padded_sequence.mass) / float(target_mass))
-                logger.debug("%s, %s, %s" %
-                             (padded_sequence, padded_sequence.mass, error))
+                #logger.debug("%s, %s, %s" %
+                #             (padded_sequence, padded_sequence.mass, error))
                 # Accept?
                 if error <= ppm_error:
                     if str(padded_sequence) in self.ignore_sequences:
                         continue
-                    logger.debug("Accepting %s %s" %
-                                (padded_sequence, padded_sequence.mass))
+                    #logger.debug("Accepting %s %s" %
+                                #(padded_sequence, padded_sequence.mass))
                     solutions.add(str(padded_sequence))
 
             # Reset, too big?
