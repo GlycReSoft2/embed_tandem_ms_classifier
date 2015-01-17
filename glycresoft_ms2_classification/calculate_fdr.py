@@ -91,9 +91,9 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
     scored_matches_frame = classify_matches.prepare_model_file(scored_matches_path)
     decoy_matches_frame = None
     if ms1_tolerance is None:
-        ms1_tolerance = scored_matches_frame.metadata["ms1_tolerance"]
+        ms1_tolerance = scored_matches_frame.metadata["ms1_ppm_tolerance"]
     if ms2_tolerance is None:
-        ms2_tolerance = scored_matches_frame.metadata["ms2_tolerance"]
+        ms2_tolerance = scored_matches_frame.metadata["ms2_ppm_tolerance"]
 
     if outfile_path is None:
         outfile_path = scored_matches_path[:-5] + "_fdr.json"
@@ -117,6 +117,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
         decoy_matches_frame = classify_matches.prepare_model_file(
             decoy_matches_path)
     logger.info("Evaluating predicates")
+    logger.debug("Decoy Metadata: %r", decoy_matches_frame.metadata)
     fdr_search = optimize_fdr.CountExclusion(
         scored_matches_frame, decoy_matches_frame,
         decoy_matches_frame.metadata["decoy_ratio"], ["MS2_Score", "peptideLens", "numStubs"])
