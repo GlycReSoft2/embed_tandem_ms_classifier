@@ -1,12 +1,8 @@
 import os
 import logging
 logfile = os.path.expanduser("~/.glycresoft-log")
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, level=(logging.DEBUG), filename=logfile, filemode='w' , format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
-fh = logging.FileHandler(logfile, mode='w')
-fh.setLevel(logging.DEBUG)
-logger.addHandler(fh)
-#logger.addHandler(logging.StreamHandler())
 
 import atexit
 import json
@@ -351,7 +347,7 @@ def main():
 
     classify_with_model_app.add_argument("--decoy-to-real-ratio", action="store", default=20, type=int, help="Number of\
         decoys per prediction sequence")
-    classify_with_model_app.add_argument("--random-only", action="store", default=False, type=bool, help="Don't\
+    classify_with_model_app.add_argument("--random-only", action="store_true", default=False, type=bool, help="Don't\
         generate shuffled decoys, only randomized sequences")
     classify_with_model_app.add_argument("--prefix-length", default=0, required=False, type=int,
                                          help="Length of peptide prefix to preserve when generating\
@@ -400,7 +396,7 @@ def main():
         "--decoys-file", default=None, help="A file containing precomputed decoy sequence matches")
     calculate_fdr_app.add_argument("--decoy-to-real-ratio", action="store", default=20, type=int, help="Number of\
         decoys per prediction sequence")
-    calculate_fdr_app.add_argument("--random-only", action="store", default=False, type=bool, help="Don't\
+    calculate_fdr_app.add_argument("--random-only", action="store_true", default=False, type=bool, help="Don't\
         generate shuffled decoys, only randomized sequences")
     calculate_fdr_app.add_argument("--prefix-length", default=0, required=False, type=int,
                                    help="Length of peptide prefix to preserve when generating\

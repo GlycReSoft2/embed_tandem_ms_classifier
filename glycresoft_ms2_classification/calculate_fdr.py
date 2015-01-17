@@ -50,12 +50,12 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
                                  ms2_tolerance=2e-5, num_decoys_per_real_mass=20.0,
                                  method="full_random_forest", random_only=False,
                                  method_init_args=None, method_fit_args=None,
-                                 n_processes=6):
+                                 n_processes=6, outfile_path=None):
 
     decoy_file_name = make_decoys.taskmain(scored_matches_path,
                                            count=int(num_decoys_per_real_mass),
                                            prefix_len=prefix_len, suffix_len=suffix_len,
-                                           n_processes=n_processes, random_only=random_only)
+                                           n_processes=n_processes, random_only=random_only, out=outfile_path)
     logger.info("Decoy Ion Space: %s", decoy_file_name)
     match_ions2.match_frags(
         decoy_file_name, decon_data,
@@ -103,7 +103,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
             suffix_len=suffix_len, ms1_tolerance=ms1_tolerance, ms2_tolerance=ms2_tolerance,
             num_decoys_per_real_mass=num_decoys_per_real_mass, random_only=random_only,
             method=method, method_init_args=method_init_args, method_fit_args=method_fit_args,
-            n_processes=n_processes)
+            n_processes=n_processes, outfile_path=outfile_path)
         decoy_matches_frame = classify_matches.prepare_model_file(
             decoy_matches_path)
     elif model_file_path is not None and decoy_matches_path is not None:

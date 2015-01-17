@@ -192,11 +192,11 @@ def random_glycopeptide_to_fragments(sequence_record):
 
 
 def taskmain(predictions_path, prefix_len=0, suffix_len=0,
-             count=20, random_only=False, n_processes=5):
+             count=20, random_only=False, n_processes=5, out=None):
 
     start_time = time.time()
     predictions = prediction_tools.prepare_model_file(predictions_path)
-    decoy_path = predictions_path.rsplit("scored", 1)[0] + "decoy.db"
+    decoy_path = (predictions_path if out is None else out).rsplit("scored", 1)[0] + "decoy.db"
     metadata = predictions.metadata
     metadata = copy.deepcopy(metadata)
     metadata["tag"] = (metadata["tag"] if metadata["tag"] not in {"", None} else "") + "decoy"
