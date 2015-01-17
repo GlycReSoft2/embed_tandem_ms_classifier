@@ -117,7 +117,6 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
         decoy_matches_frame = classify_matches.prepare_model_file(
             decoy_matches_path)
     logger.info("Evaluating predicates")
-    logger.debug("Decoy Metadata: %r", decoy_matches_frame.metadata)
     fdr_search = optimize_fdr.CountExclusion(
         scored_matches_frame, decoy_matches_frame,
         decoy_matches_frame.metadata["decoy_ratio"], ["MS2_Score", "peptideLens", "numStubs"])

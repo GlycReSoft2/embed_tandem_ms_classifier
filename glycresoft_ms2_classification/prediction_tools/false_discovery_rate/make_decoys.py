@@ -67,7 +67,8 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
 
     short = count - len(solutions)
     if(short > 0):
-        decoy_logger.info("%s was short %d sequences", str(seq), short)
+        if not random_only:
+            decoy_logger.info("%s was short %d sequences", str(seq), short)
         randomized = builder.generate_random(row.Calc_mass, short)
         if len(randomized) != short:
             decoy_logger.warning("(Glycopeptide: %s, Mass: %e) Was short %d decoys. Randomly generated only %d",
