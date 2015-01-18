@@ -1,9 +1,9 @@
+from copy import deepcopy
 from . import constants as structure_constants
 from . import PeptideSequenceBase
-from ..utils.memoize import memocpy
+from ..utils.memoize import memoize
 
-
-@memocpy()
+@memoize()
 def sequence_tokenizer(sequence, implicit_n_term=None, implicit_c_term=None):
     '''
         A simple stateful sequence parser implementing a formally context-free language
@@ -132,7 +132,6 @@ def sequence_tokenizer(sequence, implicit_n_term=None, implicit_c_term=None):
 
 # Unused alias
 parse = sequence_tokenizer
-
 
 #@memocpy(20000)
 def rsequence_tokenizer(sequence, implicit_n_term=None, implicit_c_term=None):
@@ -282,7 +281,7 @@ def prefix_to_postfix_modifications(sequence):
     This code does not work with terminal modifications'''
     sequence = "!" + sequence
 
-    tokens, mods, glycan, n_term, c_term = sequence_tokenizer(sequence)
+    tokens, mods, glycan, n_term, c_term = deepcopy(sequence_tokenizer(sequence))
     last_mods = tokens.pop(0)[1]
     for token in tokens:
         mods = token[1]
