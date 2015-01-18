@@ -10,6 +10,7 @@ class MassHeap(object):
     '''
     def __init__(self, items=None, key=None):
         self.contents = []
+        self.carrier = MassCarrier(0.0)
         if items is not None:
             self.contents.extend(MassWrapper(i, key) for i in items)
             heapq.heapify(self.contents)
@@ -39,7 +40,8 @@ class MassHeap(object):
         self.contents.sort()
 
     def get_lower_than(self, mass):
-        dummy = MassWrapper(None, lambda x: mass)
+        dummy = self.carrier
+        dummy.mass = mass
         for item in self.contents:
             if item < dummy:
                 yield item.object
@@ -51,6 +53,11 @@ class MassHeap(object):
 
     def __getitem__(self, index):
         return self.contents[index]
+
+
+class MassCarrier(object):
+    def __init__(self, mass):
+        self.mass = mass
 
 
 class MassWrapper(object):
