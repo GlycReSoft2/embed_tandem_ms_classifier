@@ -284,17 +284,17 @@ def random_glycopeptide_to_sequence_space(sequence, proxy, glycan_string=None):
     stub_ions = pep_stubs.get_stubs()
     oxonium_ions = pep_stubs.get_oxonium_ions()
     ions = {
-        "MS1_Score": proxy.MS1_Score,
-        "Obs_Mass": seq_obj.mass - proxy.ppm_error,
+        "MS1_Score": proxy["MS1_Score"],
+        "Obs_Mass": seq_obj.mass - proxy["ppm_error"],
         "Calc_mass": seq_obj.mass,
-        "ppm_error": proxy.ppm_error,
+        "ppm_error": proxy["ppm_error"],
         "Peptide": peptide_seq,
         "Peptide_mod": None,
         "Glycan": glycan_composition_restring,
-        "vol": 1,
+        "vol": proxy['vol'],
         "glyco_sites": len(glycan_map),
-        "startAA": None,
-        "endAA": None,
+        "startAA": -1,
+        "endAA": -1,
         "Seq_with_mod": seq_obj.get_sequence(),
         "bare_b_ions": b_ions,
         "b_ions_with_HexNAc": b_ions_HexNAc,

@@ -3,6 +3,7 @@ from . import constants as structure_constants
 from . import PeptideSequenceBase
 from ..utils.memoize import memoize
 
+
 @memoize()
 def sequence_tokenizer(sequence, implicit_n_term=None, implicit_c_term=None):
     '''

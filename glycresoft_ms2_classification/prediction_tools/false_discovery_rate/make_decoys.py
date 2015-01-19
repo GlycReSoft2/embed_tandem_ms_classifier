@@ -39,7 +39,7 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
     ix, row = ix_prediction
     solutions = set()
     seq = Sequence(row.Glycopeptide_identifier).get_sequence(include_glycan=False)
-    decoy_logger.info("Building decoys for  %s", (row.Glycopeptide_identifier, row.Calc_mass))
+    decoy_logger.info("Building decoys for  %s", (ix, row.Glycopeptide_identifier, row.Calc_mass))
     solutions.add(seq)
     if not random_only:
         iter_count = 0

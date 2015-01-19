@@ -80,7 +80,7 @@ class Residue(ResidueBase):
         self.compo = residue_table.get(name)
         self.name = name
         if self.compo is not None:
-            self.mass = Composition(self.compo).mass
+            self.mass = composition_to_mass(self.compo)
         else:
             self.mass = 0.0
 
