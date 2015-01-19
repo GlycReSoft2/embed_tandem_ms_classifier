@@ -1,7 +1,12 @@
 import heapq
+try:
+    from .cmass_heap import MassHeap as CMassHeap
+    use_cython = True
+except:
+    use_cython = False
 
 
-class MassHeap(object):
+class PMassHeap(object):
     '''
         Defines a heap based on the mass of each element in its contents.
 
@@ -90,3 +95,8 @@ class MassWrapper(object):
             return self.object != other.object
         except:
             return True
+
+if use_cython:
+    MassHeap = CMassHeap
+else:
+    MassHeap = PMassHeap
