@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages, Extension
+from Cython.Build import cythonize
 
 setup(
     name="GlycReSoft",
@@ -19,8 +20,9 @@ setup(
         'glycresoft_ms2_classification': ["*.csv", "*.xml", "*.json", "data/*.csv"],
         'glycresoft_ms2_classification.structure': ["structure/data/*.csv", "structure/data/*.json"]
     },
-    ext_modules=[Extension("glycresoft_ms2_classification.utils.cmass_heap",
-                           ["glycresoft_ms2_classification/utils/cmass_heap.c"])],
+    ext_modules=cythonize("glycresoft_ms2_classification/utils/cmass_heap.pyx"),
+    #[Extension("glycresoft_ms2_classification.utils.cmass_heap",
+                #           ["glycresoft_ms2_classification/utils/cmass_heap.c"])],
     entry_points={
         'console_scripts': [
             "glycresoft-ms2 = glycresoft_ms2_classification.entry_point:main",
