@@ -1,8 +1,13 @@
 import heapq
 
-cdef class MassHeap:
+def new_object(obj):
+    return obj.__new__(obj)
+
+__version__ = 1.0
+
+cdef class MassHeap(object):
     cdef public  list contents
-    cdef MassCarrier carrier
+    cdef public MassCarrier carrier
 
     def __init__(self, items):
         self.carrier = MassCarrier(0.0)
@@ -10,6 +15,24 @@ cdef class MassHeap:
         self.contents.extend(MassWrapper(i) for i in items)
         heapq.heapify(self.contents)
         self._sort()
+
+    def __reduce__(self):
+        return type(self), (list(self),), self.__getstate__()
+
+
+    def __getstate__(self):
+        print("In __getstate__")
+        d = {}
+        d['items'] = list(self)
+        print(d)
+        return d
+
+    def __setstate__(self, d):
+        print("In setstate")
+        self.contents = []
+        self.carrier = MassCarrier(0.0)
+        self.contents.extend(MassWrapper(i) for i in d['items'])
+        print(self, self.contents)
 
     def __iter__(self):
         for x in self.contents:

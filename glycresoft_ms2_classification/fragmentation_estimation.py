@@ -132,10 +132,11 @@ class BondBreakageCounter(object):
     def __setitem__(self, key, value):
         try:
             self.data[key] = value
+        except:
+            pass
 
     def plot(self, *args, **kwargs):
         return self.data.plot(*args, **kwargs)
 
     def normalize(self):
-
-
+        pass

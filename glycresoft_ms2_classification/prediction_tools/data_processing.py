@@ -418,11 +418,14 @@ class PredictionResults(object):
         return fdr.query("false_discovery_rate <= 0.05").sort(
             ["num_real_matches"], ascending=False).iloc[:n]
 
-    def kvquery(self, frame=None):
-        if frame is None:
+    def kvquery(self, frame=None, **kwargs):
+        if frame is None and len(kwargs) == 0:
             frame = self.optimize_fdr()
+        elif frame is None:
+            frame = pd.DataFrame()
         args = {k: v for k, v in frame.to_dict(orient="records")[0].items()
                 if k not in {"false_discovery_rate", "num_real_matches", "num_decoy_matches"}}
+        args.update(kwargs)
         print(args)
         return self.query(query_threshold(**args))
 
