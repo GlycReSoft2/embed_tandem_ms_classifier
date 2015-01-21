@@ -1,6 +1,4 @@
 import logging
-import ipdb
-
 decoy_logger = logging.getLogger(__name__)
 import argparse
 import multiprocessing
@@ -71,7 +69,6 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
     if(short > 0):
         if not random_only:
             decoy_logger.info("%s was short %d sequences", str(seq), short)
-        print(builder, builder.components)
         randomized = builder.generate_random(row.Calc_mass, short)
         if len(randomized) != short:
             decoy_logger.warning("(Glycopeptide: %s, Mass: %e) Was short %d decoys. Randomly generated only %d",
@@ -235,13 +232,14 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
     total_missing = 0
     preds_missed = []
     pool = None
-    if n_processes > 0:
+    if n_processes > 1:
         pool = multiprocessing.Pool(n_processes)
         dispatcher = functools.partial(pool.imap_unordered, chunksize=1000)
+        decoy_logger.info("Building decoys concurrently on %d processes", n_processes)
     else:
+        decoy_logger.info("Building decoys sequentially")
         dispatcher = itertools.imap
     i = 0
-    print(builder, builder.components)
     pred_iter = 0
     for decoy_tuple in (
         itertools.chain.from_iterable(

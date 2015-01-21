@@ -21,18 +21,14 @@ cdef class MassHeap(object):
 
 
     def __getstate__(self):
-        print("In __getstate__")
         d = {}
         d['items'] = list(self)
-        print(d)
         return d
 
     def __setstate__(self, d):
-        print("In setstate")
         self.contents = []
         self.carrier = MassCarrier(0.0)
         self.contents.extend(MassWrapper(i) for i in d['items'])
-        print(self, self.contents)
 
     def __iter__(self):
         for x in self.contents:
