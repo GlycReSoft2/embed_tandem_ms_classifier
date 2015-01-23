@@ -3,6 +3,11 @@ import unittest
 import warnings
 import csv
 import logging
+from ConfigParser import ConfigParser
+
+config_file = "test.config"
+config =  ConfigParser()
+config.read(config_file)
 
 logging.basicConfig(level=logging.DEBUG)
 #multiprocessing_util.log_to_stderr()
@@ -105,14 +110,14 @@ class IonMatchingPipeline(unittest.TestCase):
     #             # Windows doesn't like really long file names.
     #             print(e)
 
-    def test_7_calculate_fdr_step(self):
-        print("test_7_calculate_fdr_step")
-
-        predicates = calculate_fdr.default_predicates()
-        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
-                                              self.test_model_file_path, suffix_len=1,
-                                              predicate_fns=predicates, n_processes=self.num_procs)
-        self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
+#    def test_7_calculate_fdr_step(self):
+#        print("test_7_calculate_fdr_step")
+#
+#        predicates = calculate_fdr.default_predicates()
+#        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
+#                                              self.test_model_file_path, suffix_len=1,
+#                                              predicate_fns=predicates, n_processes=self.num_procs)
+#        self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
 
     # def test_8_apply_to_different_dataset(self):
     #     reclassified_file = entry_point.CompareModelsDiagnosticTask(self.test_model_file_path,
@@ -216,6 +221,11 @@ class TestComposition(unittest.TestCase):
 sequence_mass = 2514.11686191
 electron_mass = 0.000549
 proton_mass = 1.00727647
+
+for section in config.sections():
+    for k, v in config.items(section):
+        setattr(locals()[section], k, v)
+
 
 if __name__ == '__main__':
     unittest.main()

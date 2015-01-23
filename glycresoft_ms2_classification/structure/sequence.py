@@ -558,3 +558,30 @@ def cleave(sequence, rule, missed_cleavages=0, min_length=0, **kwargs):
                     peptides.append((seq, cleavage_sites[j], cleavage_sites[-1] if cleavage_sites[-1]
                                      is not None else sequence_length(sequence)))
     return set(peptides)
+
+
+class SimplePeptide(object):
+    def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None):
+        self.sequence = sequence_str
+        if mass is not None:
+            self.mass = mass
+        else:
+            self.mass = sequence_to_mass(sequence_str)
+        self.missed_cleavages = missed_cleavages
+        self.cleaver = cleaver
+
+    def pad(self):
+        for padded in self.cleaver.pad(self):
+            yield SimplePeptide(padded, missed_cleavages=self.missed_cleavages)
+
+    def extend(self, other):
+        self.sequence += str(other)
+        self.missed_cleavages += other.missed_cleavages
+        self.mass += other.mass
+
+    def __str__(self):
+        return self.sequence
+
+    def __repr__(self):
+        return "{0}:{1}".format(self.sequence, (self.mass, self.missed_cleavages))
+

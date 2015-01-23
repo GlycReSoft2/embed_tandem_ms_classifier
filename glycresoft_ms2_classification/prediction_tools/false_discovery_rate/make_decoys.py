@@ -235,7 +235,9 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
     if n_processes > 1:
         pool = multiprocessing.Pool(n_processes)
         dispatcher = functools.partial(pool.imap_unordered, chunksize=1000)
+        decoy_logger.info("Building decoys concurrently on %d processes", n_processes)
     else:
+        decoy_logger.info("Building decoys sequentially")
         dispatcher = itertools.imap
     i = 0
     pred_iter = 0
@@ -274,5 +276,5 @@ app.add_argument("-r", "--random-only", action="store_true")
 
 if __name__ == '__main__':
     import sys
-    logging.basicConfig(level="DEBUG")
+    logging.basicConfig(level="INFO")
     taskmain(sys.argv[1], 0, 1, 20, 1)

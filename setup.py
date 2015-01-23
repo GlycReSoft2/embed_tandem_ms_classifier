@@ -1,5 +1,6 @@
 import sys
 from setuptools import setup, find_packages, Extension
+from Cython.Build import cythonize
 
 # With gratitude to the SqlAlchemy setup.py authors
 
@@ -13,8 +14,10 @@ if sys.platform == 'win32':
     # find the compiler
     ext_errors += (IOError,)
 
-extensions = [Extension("glycresoft_ms2_classification.utils.cmass_heap",
-                        ["glycresoft_ms2_classification/utils/cmass_heap.c"])]
+extensions = cythonize([Extension("glycresoft_ms2_classification.utils.cmass_heap",
+                        ["glycresoft_ms2_classification/utils/cmass_heap.pyx"]),
+                        Extension("glycresoft_ms2_classification.ms.ion_matching",
+                                  ["glycresoft_ms2_classification/ms/ion_matching.pyx"])])
 
 cmdclass = {}
 
