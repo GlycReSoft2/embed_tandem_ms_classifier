@@ -84,19 +84,26 @@ class MSMSSqlDB(object):
     def rollback(self):
         self.connection.rollback()
 
+    def _find_boundaries(self, mass, tolerance):
+        spread = mass * tolerance
+        return (mass - spread, mass + spread)
+
     def ppm_match_tolerance_search(self, mass, tolerance, target_table="ObservedPrecursorSpectrum",
                                    precursor_id=None, mass_shift=0):
-        if mass_shift != 0:
-            mass_expr = "(neutral_mass + {0})".format(mass_shift)
-        else:
-            mass_expr = "neutral_mass"
-        query_str = "select * from {target_table} where\
-         abs(({mass_expr} - {search_mass})/({mass_expr})) < {tolerance}"
-        if precursor_id is not None:
-            query_str += " and precursor_id={precursor_id}"
-        results = self.execute(query_str.format(target_table=target_table, mass_expr=mass_expr,
-                                                search_mass=mass,
-                                                tolerance=tolerance, precursor_id=precursor_id))
+        # if mass_shift != 0:
+        #     mass_expr = "(neutral_mass + {0})".format(mass_shift)
+        # else:
+        #     mass_expr = "neutral_mass"
+        # query_str = "select * from {target_table} where\
+        #  abs(({mass_expr} - {search_mass})/({search_mass})) < {tolerance}"
+        # if precursor_id is not None:
+        #     query_str += " and precursor_id={precursor_id}"
+        # results = self.execute(query_str.format(target_table=target_table, mass_expr=mass_expr,
+        #                                         search_mass=mass,
+        #                                         tolerance=tolerance, precursor_id=precursor_id))
+        boundaries = self._find_boundaries(mass + mass_shift, tolerance)
+        results = self.execute("select * from ObservedPrecursorSpectrum\
+         where neutral_mass between %f and %f;" % boundaries)
         for result in results:
             yield result
 

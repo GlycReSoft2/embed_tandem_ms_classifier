@@ -74,6 +74,7 @@ class DeconIOBase(object):
             decon_io_logger.debug("Initializing database")
             db.init_schema()
             db.load_data(self.data.values())
+            db.apply_indices()
         return db
 
     def index_by_scan_ids(self):
