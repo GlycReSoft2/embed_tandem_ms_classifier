@@ -3,19 +3,18 @@ import re
 import urllib2
 import json
 import logging
-decon_io_logger = logging.getLogger("DeconIO")
 try:
     import cPickle as pickle
 except:
     import pickle
 import gzip
 from collections import Iterable
-
 from .spectra import (neutral_mass, mass_charge_ratio,
                       ObservedPrecursorSpectrum,
                       ObservedTandemSpectrum, MSMSSqlDB)
 from .constants import constants
 
+decon_io_logger = logging.getLogger("DeconIO")
 
 opener = open
 compressed_opener = gzip.open
@@ -63,7 +62,7 @@ class DeconIOBase(object):
     def __getitem__(self, ix):
         return self.data[ix]
 
-    def to_db(self, file_path=None, overwrite=False):
+    def to_db(self, file_path=None, overwrite=True):
         if file_path is None:
             file_path = self.file_path + '.db'
         if file_path is None:
