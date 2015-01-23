@@ -6,7 +6,7 @@ import itertools
 import logging
 
 logger = logging.getLogger(__name__)
-
+import profilehooks
 from os.path import splitext
 from collections import Counter, defaultdict
 
@@ -99,7 +99,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 kind = mass = ox_ion
             for obs_ions in real_ions.tandem_data:
                 oxonium_ppm = (
-                    ((obs_ions.mass + Proton) - mass) / (obs_ions.mass + Proton))
+                    ((obs_ions.mass + Proton) - mass) / (mass))
                 if fabs(oxonium_ppm) <= ms2_tolerance:
                     oxoniums.append(
                         {"ion": (obs_ions.mass + Proton), "ppm_error": oxonium_ppm * 1e6,
@@ -116,7 +116,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
             deprotonated_ion = frag_mass - Proton
             for obs_ions in real_ions.tandem_data:
                 tandem_ppm = float(
-                    (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                    (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     b_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -133,7 +133,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
             deprotonated_ion = frag_mass - Proton
             for obs_ions in real_ions.tandem_data:
                 tandem_ppm = float(
-                    (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                    (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     b_HexNAc_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -153,7 +153,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
             deprotonated_ion = frag_mass - Proton
             for obs_ions in real_ions.tandem_data:
                 tandem_ppm = float(
-                    (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                    (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     y_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -170,7 +170,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
             deprotonated_ion = frag_mass - Proton
             for obs_ions in real_ions.tandem_data:
                 tandem_ppm = float(
-                    (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                    (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     y_HexNAc_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -189,7 +189,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
             deprotonated_ion = frag_mass - Proton
             for obs_ions in real_ions.tandem_data:
                 tandem_ppm = float(
-                    (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                    (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     stub_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -220,7 +220,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
 
 def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2_tolerance):
     theoretical_sequence = theoretical["Seq_with_mod"] + theoretical["Glycan"]
-    obs_mass = float(theoretical['Calc_mass'])
+    calc_mass = float(theoretical['Calc_mass'])
     results = []
     did_match_counter = Counter()
     annotate = defaultdict(list)
@@ -229,7 +229,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
         scan_id = real_ions.scan_ids[0]
 
         precursor_ppm = (
-            (real_ions.neutral_mass - obs_mass) / real_ions.neutral_mass)
+            (real_ions.neutral_mass - calc_mass) / calc_mass)
 
         if fabs(precursor_ppm) <= ms1_tolerance:
             did_match_counter[tandem_ms_ind] += 1
@@ -239,7 +239,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
             for ox_ion in Oxonium_ions:
                 for obs_ions in real_ions.tandem_data:
                     oxonium_ppm = (
-                        ((obs_ions.mass + Proton) - ox_ion) / (obs_ions.mass + Proton))
+                        ((obs_ions.mass + Proton) - ox_ion) / ox_ion)
                     if fabs(oxonium_ppm) <= ms2_tolerance:
                         oxoniums.append(
                             {"ion": (obs_ions.mass + Proton), "ppm_error": oxonium_ppm * 1e6,
@@ -256,7 +256,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                 deprotonated_ion = frag_mass - Proton
                 for obs_ions in real_ions.tandem_data:
                     tandem_ppm = float(
-                        (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                        (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         b_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -273,7 +273,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                 deprotonated_ion = frag_mass - Proton
                 for obs_ions in real_ions.tandem_data:
                     tandem_ppm = float(
-                        (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                        (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         b_HexNAc_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -293,7 +293,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                 deprotonated_ion = frag_mass - Proton
                 for obs_ions in real_ions.tandem_data:
                     tandem_ppm = float(
-                        (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                        (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         y_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -310,7 +310,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                 deprotonated_ion = frag_mass - Proton
                 for obs_ions in real_ions.tandem_data:
                     tandem_ppm = float(
-                        (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                        (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         y_HexNAc_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -329,7 +329,7 @@ def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2
                 deprotonated_ion = frag_mass - Proton
                 for obs_ions in real_ions.tandem_data:
                     tandem_ppm = float(
-                        (obs_ions.mass - (deprotonated_ion)) / obs_ions.mass)
+                        (obs_ions.mass - (deprotonated_ion)) / deprotonated_ion)
                     if fabs(tandem_ppm) <= ms2_tolerance:
                         stub_type.append(
                             {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
@@ -414,6 +414,7 @@ def merge_ion_matches(matches):
     return best_matches
 
 
+@profilehooks.profile
 def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                 ms2_tolerance=ms2_tolerance_default, split_decon_data=False,
                 tag="", decon_data_format='bupid_yaml', n_processes=4,
