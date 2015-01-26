@@ -98,6 +98,7 @@ class CountExclusion(object):
         self.trials["num_real_matches"] = np.ravel(prediction_array)
         self.trials["num_decoy_matches"] = np.ravel(decoy_array)
         self.trials.dropna(0, 'any', inplace=True)
+        self.trials.sort(["false_discovery_rate", "num_real_matches"], ascending=[True, False], inplace=True)
 
     def make_search_param(self, name):
         param = {}

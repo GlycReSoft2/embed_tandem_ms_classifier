@@ -1,6 +1,13 @@
 import os
 import logging
-logfile = os.path.expanduser("~/.glycresoft-log")
+try:
+    logfile = "./.glycresoft-log"
+    open(logfile, 'w').close()
+    print("logging to ./")
+except Exception, e:
+    print(e)
+    logfile = os.path.expanduser("~/.glycresoft-log")
+    print("logging to ~/")
 logging.basicConfig(level=logging.DEBUG, filename=logfile, filemode='w' , format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
 

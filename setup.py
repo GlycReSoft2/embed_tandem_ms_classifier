@@ -17,7 +17,9 @@ if sys.platform == 'win32':
 extensions = cythonize([Extension("glycresoft_ms2_classification.utils.cmass_heap",
                         ["glycresoft_ms2_classification/utils/cmass_heap.pyx"]),
                         Extension("glycresoft_ms2_classification.ms.ion_matching",
-                                  ["glycresoft_ms2_classification/ms/ion_matching.pyx"])])
+                                  ["glycresoft_ms2_classification/ms/ion_matching.pyx"])],
+                        annotate=True,
+                        profile=True)
 
 cmdclass = {}
 

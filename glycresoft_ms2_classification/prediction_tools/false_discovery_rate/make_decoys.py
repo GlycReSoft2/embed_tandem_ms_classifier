@@ -33,13 +33,14 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
         :param suffix_len: int >= 0, number of AA to preserve order on of the
                            end of the match sequence
     '''
+    pname = multiprocessing.current_process().name
     iter_max = count * 10 if iter_max is None else iter_max
     shuffles = list()
     total_missing = 0
     ix, row = ix_prediction
     solutions = set()
     seq = Sequence(row.Glycopeptide_identifier).get_sequence(include_glycan=False)
-    decoy_logger.info("Building decoys for  %s", (ix, row.Glycopeptide_identifier, row.Calc_mass))
+    #decoy_logger.info("[%s] Building decoys for  %s", pname, (ix, row.Glycopeptide_identifier, row.Calc_mass))
     solutions.add(seq)
     if not random_only:
         iter_count = 0
@@ -48,7 +49,11 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
         suf = clone[-suffix_len:]
         body = clone[prefix_len:(-suffix_len)]
         while(len(solutions) - 1 < count and iter_count < iter_max):
-            random.shuffle(body)
+            # Permutations are very similar to the original sequence so first
+            # transforming the sequence by shuffling it at random or reversing
+            # it produce more heterogenous decoys
+            # random.shuffle(body)
+            body = body[::-1]
             for shuffle in itertools.permutations(body):
                 clone = pref + list(shuffle) + suf
                 res = str(list_to_sequence(clone))
@@ -83,6 +88,7 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
     for decoy in decoys:
         try:
             frags = random_glycopeptide_to_fragments(decoy)
+            frags["progenitor"] = row.Glycopeptide_identifier
             decoy_search_space.append(frags)
         except Exception, e:
             decoy_logger.error(e, exc_info=e)

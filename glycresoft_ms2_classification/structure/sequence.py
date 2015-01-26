@@ -559,25 +559,45 @@ def cleave(sequence, rule, missed_cleavages=0, min_length=0, **kwargs):
                                      is not None else sequence_length(sequence)))
     return set(peptides)
 
+@memoize()
+def sequence_tokens_to_mass(tokens):
+    mass = 0.0
+    for residue, mods in tokens:
+        mass += Residue.mass_by_name(residue)
+        for mod in mods:
+            mass += Modification.mass_by_name(mod)
+    if n_term is not None:
+        mass += Modification.mass_by_name(n_term)
+    else:
+        mass += Composition("H").mass
+    if c_term is not None:
+        mass += Modification.mass_by_name(c_term)
+    else:
+        mass += Composition("OH").mass
+    return mass
 
 class SimplePeptide(object):
-    def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None):
-        self.sequence = sequence_str
-        if mass is not None:
-            self.mass = mass
-        else:
-            self.mass = sequence_to_mass(sequence_str)
+    def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None, mod_index=None):
+        self.sequence = str(sequence_str)
+        tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
+        self.mass = sequence_to_mass(sequence_str)
+        self.length = len(tokens)
         self.missed_cleavages = missed_cleavages
         self.cleaver = cleaver
+        self.mod_index = mod_index if mod_index is not None else {}
 
     def pad(self):
         for padded in self.cleaver.pad(self):
             yield SimplePeptide(padded, missed_cleavages=self.missed_cleavages)
 
+    def __len__(self):
+        return self.length
+
     def extend(self, other):
         self.sequence += str(other)
         self.missed_cleavages += other.missed_cleavages
         self.mass += other.mass
+        self.mod_index.update(other.mod_index)
 
     def __str__(self):
         return self.sequence

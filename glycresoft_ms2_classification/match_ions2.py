@@ -4,20 +4,27 @@ import multiprocessing
 import functools
 import itertools
 import logging
-
+import random
 logger = logging.getLogger(__name__)
-import profilehooks
+
 from os.path import splitext
 from collections import Counter, defaultdict
 
 import sqlitedict
 
 from glycresoft_ms2_classification.error_code_interface import NoIonsMatchedException
-from glycresoft_ms2_classification.utils import try_deserialize, try_get_outfile, collectiontools
+from glycresoft_ms2_classification.utils import try_get_outfile, collectiontools
 from glycresoft_ms2_classification.ms.bupid_topdown_deconvoluter import BUPIDYamlParser
 from glycresoft_ms2_classification.ms import default_loader, default_serializer
 from glycresoft_ms2_classification.ms import DeconIOBase, MSMSSqlDB, ObservedPrecursorSpectrum
 from glycresoft_ms2_classification.utils.parallel_opener import ParallelParser
+
+use_cython = True
+try:
+    from glycresoft_ms2_classification.ms import ion_matching
+    c_match_observed_to_theoretical_sql = ion_matching.match_observed_wrap
+except:
+    use_cython = False
 
 Proton = 1.007276035
 
@@ -53,6 +60,7 @@ def split_decon_data_by_index(decon_data, splitting_index):
 
 
 def save_split_decon_data(matched, unmatched, file_stem):
+    logger.info("Saving spectra to %s", file_stem)
     default_serializer(matched, file_stem + "matched.pkl")
     default_serializer(unmatched, file_stem + "unmatched.pkl")
 
@@ -414,7 +422,6 @@ def merge_ion_matches(matches):
     return best_matches
 
 
-@profilehooks.profile
 def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                 ms2_tolerance=ms2_tolerance_default, split_decon_data=False,
                 tag="", decon_data_format='bupid_yaml', n_processes=4,
@@ -443,21 +450,16 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     metadata["ms1_ppm_tolerance"] = ms1_tolerance
     metadata["ms2_ppm_tolerance"] = ms2_tolerance
     metadata["deconvoluted_spectra_file"] = decon_data
+    if tag == "":
+        tag = hex(random.randint(100000, 1000000))
     if "tag" not in metadata:
         metadata["tag"] = tag
-    if metadata["tag"] == "decoy":
-        tag = "decoy"
-    elif tag is None:
+    else:
         tag = metadata["tag"]
-
     metadata.commit()
 
     logging.info("Run tag: %s", tag)
-
     theoretical_fragments = theoretical_search_space.itervalues()
-
-    #logger.info("There are {0} theoretical sequences to search.".format(len(theoretical_search_space)))
-
     fragment_match_store = sqlitedict.SqliteDict(db_file, tablename="ion_matches_unmerged")
 
     did_match_counter = Counter()
@@ -468,14 +470,18 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     logger.info("Index built.")
     # task_fn = functools.partial(match_observed_to_theoretical, ms1_tolerance=ms1_tolerance,
     #                             ms2_tolerance=ms2_tolerance, observed_ions=data)
-    task_fn = functools.partial(match_observed_to_theoretical_sql, ms1_tolerance=ms1_tolerance,
+    match_fn = match_observed_to_theoretical_sql
+    if use_cython:
+        logger.info("Using Cython")
+        match_fn = c_match_observed_to_theoretical_sql
+    task_fn = functools.partial(match_fn, ms1_tolerance=ms1_tolerance,
                                 ms2_tolerance=ms2_tolerance, observed_ions_conn_string=db.connection_string)
     # Index counter for sqlitedict
     cntr = 0
     if n_processes > 1:
         logger.debug("Matching concurrently")
         matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
-                                               chunksize=100)  # len(theoretical_fragments)/(n_processes * 2)
+                                               chunksize=5000)
         for matches, counter, annotater in matching_process:
             #results.extend(matches)
             for m in matches:

@@ -9,7 +9,6 @@ config_file = "test.config"
 config =  ConfigParser()
 config.read(config_file)
 
-logging.basicConfig(level=logging.DEBUG)
 #multiprocessing_util.log_to_stderr()
 
 from sqlitedict import SqliteDict
@@ -20,6 +19,8 @@ from glycresoft_ms2_classification import calculate_fdr
 from glycresoft_ms2_classification import entry_point
 from glycresoft_ms2_classification import classify_matches
 
+entry_point.logger.addHandler(logging.StreamHandler())
+
 from glycresoft_ms2_classification.structure import sequence
 from glycresoft_ms2_classification.structure import glycans
 from glycresoft_ms2_classification.structure import modification
@@ -27,6 +28,14 @@ from glycresoft_ms2_classification.structure import composition
 
 from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import random_glycopeptide
 
+def try_type(obj):
+    try:
+        return int(obj)
+    except:
+        try:
+            return float(obj)
+        except:
+            return str(obj)
 
 class IonMatchingPipeline(unittest.TestCase):
     db_file_name = "test_data/USSR/Resultsof20131219_005.db"
@@ -40,7 +49,8 @@ class IonMatchingPipeline(unittest.TestCase):
     methods = classify_matches.ModelTask.method_table.keys()
     ms1_match_tolerance = 1E-05
     ms2_match_tolerance = 2E-05
-    num_procs = 1
+    num_procs = 6
+    num_decoys = 20
 
     postprocessed_ions_file = "test_data/USSR/Resultsof20131219_005.processed.json"
     model_file_path = "test_data/USSR/Resultsof20131219_005.model.json"
@@ -97,6 +107,7 @@ class IonMatchingPipeline(unittest.TestCase):
         self.classification_results_file = entry_point.classify_data_by_model(self.postprocessed_ions_file,
                                                                               self.test_model_file_path,
                                                                               method=self.method)
+        print(self.classification_results_file)
         self.assertTrue(os.path.exists(self.classification_results_file))
 
     # def test_6_evaluate_model_step(self):
@@ -110,14 +121,15 @@ class IonMatchingPipeline(unittest.TestCase):
     #             # Windows doesn't like really long file names.
     #             print(e)
 
-#    def test_7_calculate_fdr_step(self):
-#        print("test_7_calculate_fdr_step")
-#
-#        predicates = calculate_fdr.default_predicates()
-#        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
-#                                              self.test_model_file_path, suffix_len=1,
-#                                              predicate_fns=predicates, n_processes=self.num_procs)
-#        self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
+    def test_7_calculate_fdr_step(self):
+        print("test_7_calculate_fdr_step")
+
+        predicates = calculate_fdr.default_predicates()
+        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
+                                              self.test_model_file_path, suffix_len=1,
+                                              num_decoys_per_real_mass=self.num_decoys,
+                                              predicate_fns=predicates, n_processes=self.num_procs)
+        self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
 
     # def test_8_apply_to_different_dataset(self):
     #     reclassified_file = entry_point.CompareModelsDiagnosticTask(self.test_model_file_path,
@@ -224,7 +236,7 @@ proton_mass = 1.00727647
 
 for section in config.sections():
     for k, v in config.items(section):
-        setattr(locals()[section], k, v)
+        setattr(locals()[section], k, try_type(v))
 
 
 if __name__ == '__main__':

@@ -10,7 +10,6 @@ from .prediction_tools import determine_ambiguity
 from .prediction_tools import model_definitions
 from .prediction_tools import generate_confusion_matrix
 from .prediction_tools import classify_with_model, generate_null_model
-from .prediction_tools import PredictionResults
 from .utils import try_deserialize, try_get_outfile
 
 
@@ -43,7 +42,7 @@ class PrepareModelTask(ModelTask):
             method_fit_args = dict()
         if output_path is None:
             output_path = try_get_outfile(model_file_path, "")
-        self.output_path = output_path + "model"
+        self.output_path = output_path.rsplit(".processed")[0] + ".model"
         super(PrepareModelTask, self).__init__(method)
         self.model_path = model_file_path
         self.model_frame = prepare_model_file(model_file_path)
@@ -79,9 +78,7 @@ class ClassifyTargetWithModelTask(ModelTask):
             method_fit_args = dict()
         if output_path is None:
             output_path = try_get_outfile(target_file_path, "scored")
-        else:
-            output_path += ".scored"
-        self.output_path = output_path
+        self.output_path = output_path.rsplit('.processed')[0] + ".scored"
         super(ClassifyTargetWithModelTask, self).__init__(
             method, method_init_args, method_fit_args)
         if method != "naive":

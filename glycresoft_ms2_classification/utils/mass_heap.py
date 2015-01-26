@@ -5,9 +5,6 @@ try:
 except:
     use_cython = False
 
-# Until the cython implementation can be pickled and shared around, can't use it
-use_cython = False
-
 
 class PMassHeap(object):
     '''

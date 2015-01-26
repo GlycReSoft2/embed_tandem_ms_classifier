@@ -3,6 +3,7 @@ import itertools
 import random
 import re
 import logging
+import multiprocessing
 logger = logging.getLogger("random_sequence_builder")
 from math import fabs
 
@@ -373,52 +374,58 @@ class RandomGlycopeptideBuilder(object):
         candidate = GrowingSequence("", self.cleavage_pattern)
         mass_to_meet = reset_target_mass()
         while(len(solutions) < count and iter_count < max_iter):
-            can_glycosylate = (len(candidate) > min_length / 3) and \
-                (has_glycan(candidate) < max_glycosylations) and \
-                (random.random() > .7)
-            options = list(components.get_lower_than(mass_to_meet))
+            try:
+                can_glycosylate = (len(candidate) > min_length / 3) and \
+                    (has_glycan(candidate) < max_glycosylations) and \
+                    (random.random() > .7)
+                options = list(components.get_lower_than(mass_to_meet))
 
-            if(can_glycosylate):
-                glycosylated_options = list(
-                    sequons.get_lower_than(mass_to_meet))
-                options += glycosylated_options
+                if(can_glycosylate):
+                    glycosylated_options = list(
+                        sequons.get_lower_than(mass_to_meet))
+                    options += glycosylated_options
+                if len(options) == 0:
+                    candidate = GrowingSequence("", cleavage_pattern)
+                    mass_to_meet = reset_target_mass()
 
-            next_part = random.choice(options)
-            candidate.extend(next_part)
-            mass_to_meet -= (next_part.mass - water)
-            # print(str(candidate), candidate.missed_cleavages, len(candidate))
-            # Reset, too many missed cleavages?
-            if candidate.missed_cleavages > max_missed_cleavages:
-                #print("Too many missed cleavages: %s, Reset!" % candidate.missed_cleavages)
-                candidate = GrowingSequence("", cleavage_pattern)
-                mass_to_meet = reset_target_mass()
+                next_part = random.choice(options)
+                candidate.extend(next_part)
+                mass_to_meet -= (next_part.mass - water)
+                # print(str(candidate), candidate.missed_cleavages, len(candidate))
+                # Reset, too many missed cleavages?
+                if candidate.missed_cleavages > max_missed_cleavages:
+                    #print("Too many missed cleavages: %s, Reset!" % candidate.missed_cleavages)
+                    candidate = GrowingSequence("", cleavage_pattern)
+                    mass_to_meet = reset_target_mass()
 
-            for padded_sequence in candidate.pad():
-                # Only consider glycosylated sequences
-                if has_glycan(candidate) < 1:
-                    break
+                for padded_sequence in candidate.pad():
+                    # Only consider glycosylated sequences
+                    if has_glycan(candidate) < 1:
+                        break
 
-                # Only consider longer sequences
-                if(len(padded_sequence) < min_length):
-                    continue
-
-                error = loc_fabs(
-                    (target_mass - padded_sequence.mass) / float(target_mass))
-                #logger.debug("%s, %s, %s" %
-                #             (padded_sequence, padded_sequence.mass, error))
-                # Accept?
-                if error <= ppm_error:
-                    if str(padded_sequence) in self.ignore_sequences:
+                    # Only consider longer sequences
+                    if(len(padded_sequence) < min_length):
                         continue
-                    #logger.debug("Accepting %s %s" %
-                                #(padded_sequence, padded_sequence.mass))
-                    solutions.add(str(padded_sequence))
 
-            # Reset, too big?
-            if mass_to_meet < components[0].mass:
-                candidate = GrowingSequence("", cleavage_pattern)
-                mass_to_meet = reset_target_mass()
+                    error = loc_fabs(
+                        (target_mass - padded_sequence.mass) / float(target_mass))
+                    #logger.debug("%s, %s, %s" %
+                    #             (padded_sequence, padded_sequence.mass, error))
+                    # Accept?
+                    if error <= ppm_error:
+                        if str(padded_sequence) in self.ignore_sequences:
+                            continue
+                        #logger.debug("Accepting %s %s" %
+                                    #(padded_sequence, padded_sequence.mass))
+                        solutions.add(str(padded_sequence))
 
-            iter_count += 1
+                # Reset, too big?
+                if mass_to_meet < components[0].mass:
+                    candidate = GrowingSequence("", cleavage_pattern)
+                    mass_to_meet = reset_target_mass()
 
+                iter_count += 1
+            except IndexError, e:
+                pname = multiprocessing.current_process().name
+                logger.error("[%s] RandomGlycopeptideBuilder: Exception occurred", pname, exc_info=e)
         return solutions

@@ -1,7 +1,7 @@
 import csv
 import os
 import re
-import json
+import datetime
 import multiprocessing
 import logging
 logger = logging.getLogger("theoretical_search_space_builder")
@@ -36,10 +36,16 @@ def get_peptide_modifications(data, modification_table):
 def get_search_space(row, glycan_identities, glycan_sites, seq_str, mod_list):
     glycan_compo = {}
     for g in glycan_identities:
-        glycan_compo[g] = int(row[''.join(['G:', g])])
+        try:
+            glycan_compo[g] = int(row[''.join([g_colon_prefix, g])])
+        except:
+            global g_colon_prefix
+            g_colon_prefix = ""
+            glycan_compo[g] = int(row[''.join([g_colon_prefix, g])])
     seq_space = SequenceSpace(
         seq_str, glycan_compo, glycan_sites, mod_list)
     return seq_space
+g_colon_prefix = "G:"
 
 
 def get_glycan_identities(colnames):
@@ -150,7 +156,7 @@ def process_predicted_ms1_ion(row, modification_table, site_list, glycan_identit
 def main(result_file, site_file, constant_modification_list=None, variable_modification_list=None,
          enzyme_info=None, n_processes=4, output_file=None):
     if output_file is None:
-        #output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
+        # output_file = os.path.splitext(result_file)[0] + '.theoretical_ions'
         output_file = os.path.splitext(result_file)[0] + ".db"
     else:
         output_file += ".db"
@@ -168,7 +174,7 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     colnames = compo_dict.fieldnames
     glycan_identity = get_glycan_identities(colnames)
     enzyme_info = map(get_enzyme, enzyme_info)
-
+    tag = datetime.datetime.strftime(datetime.datetime.now(), "%Y%m%d-%H%M%S")
     metadata = {
         "glycan_identities": glycan_identity,
         "constant_modifications": constant_modification_list,
@@ -176,6 +182,7 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
         "site_list": site_list,
         "ms1_output_file": result_file,
         "enzyme": enzyme_info,
+        "tag": tag,
         "enable_partial_hexnac_match": constants.PARTIAL_HEXNAC_LOSS
     }
 
@@ -203,7 +210,7 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
             res = task_fn(row)
             #fragment_info.extend(res)
             for item in res:
-                theoretical_search_space_store[cntr] = res
+                theoretical_search_space_store[cntr] = item
                 cntr += 1
                 if (cntr % 10000) == 0:
                     theoretical_search_space_store.commit()
