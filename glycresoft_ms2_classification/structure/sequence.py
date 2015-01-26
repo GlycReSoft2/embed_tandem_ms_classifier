@@ -310,6 +310,7 @@ class Sequence(PeptideSequenceBase):
         mod_y = defaultdict(int)
         mass_y = 0
 
+        pos = 0
         residues_in_b = []
         for pos in range(idx):
             for mod in self.seq[pos][1]:
@@ -559,6 +560,7 @@ def cleave(sequence, rule, missed_cleavages=0, min_length=0, **kwargs):
                                      is not None else sequence_length(sequence)))
     return set(peptides)
 
+
 @memoize()
 def sequence_tokens_to_mass(tokens):
     mass = 0.0
@@ -576,11 +578,12 @@ def sequence_tokens_to_mass(tokens):
         mass += Composition("OH").mass
     return mass
 
+
 class SimplePeptide(object):
     def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None, mod_index=None):
         self.sequence = str(sequence_str)
         tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
-        self.mass = sequence_to_mass(sequence_str)
+        self.mass = sequence_to_mass(sequence_str) if mass is None else mass
         self.length = len(tokens)
         self.missed_cleavages = missed_cleavages
         self.cleaver = cleaver
@@ -604,4 +607,3 @@ class SimplePeptide(object):
 
     def __repr__(self):
         return "{0}:{1}".format(self.sequence, (self.mass, self.missed_cleavages))
-
