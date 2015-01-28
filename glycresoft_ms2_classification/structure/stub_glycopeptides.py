@@ -122,12 +122,12 @@ class StubGlycopeptide:
             elif self.dHex > 0:
                 for site_i in range(1, sites + 1, 1):
                     for num_hexnac in range(1, 3, 1):
-                        key = "pep+{num_hexnac}HexNAc+0Hexose-{site_i}sites".format(**locals())
+                        #key = "pep+{num_hexnac}HexNAc+0Hexose-{site_i}sites".format(**locals())
                         # key = "pep+" + \
                         #     str(num_hexnac) + "HexNAc+" + "0Hexose" + "-" + str(
                         #         site_i) + "sites"
-                        mass = self.mass + Proton + (site_i * (num_hexnac * HexNAc))
-                        stubs.append({"key": key, "mass": mass})
+                        #mass = self.mass + Proton + (site_i * (num_hexnac * HexNAc))
+                        #stubs.append({"key": key, "mass": mass})
 
                         for num_dhex in range(0, 2, 1):
                             for num_hexose in range(0, 4, 1):
