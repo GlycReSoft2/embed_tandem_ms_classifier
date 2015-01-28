@@ -1,3 +1,4 @@
+import re
 from collections import Counter
 from copy import deepcopy
 
@@ -9,13 +10,14 @@ from ..data_processing import prepare_model_file
 from ...structure import sequence
 from ...ms import default_loader, spectra
 
+def is_backbone_ion(key):
+    return re.match(r"^[BYby]\d+", key)
 
 def take_best_predictions_spectra(predictions, spectra_db):
     threshold_predictions = predictions.kvquery()
     collector = sqlitedict.open("./spectra_counting.db", tablename="spectra_map")
     for ix, pred in threshold_predictions.iterrows():
         glycopeptide_ident = pred.Glycopeptide_identifier
-        print(glycopeptide_ident)
         matched_spectra = [spectra_db[scan_id] for scan_id in pred.scan_id_range]
         collector[ix] = {"glycopeptide": glycopeptide_ident, "spectra": matched_spectra}
     collector.commit()
@@ -24,7 +26,7 @@ def take_best_predictions_spectra(predictions, spectra_db):
 
 def sequence_position_to_tuple(seq_pos):
     mods = tuple(seq_pos[1])
-    pos = tuple(seq_pos[0], mods)
+    pos = tuple((seq_pos[0], mods))
     return pos
 
 
@@ -44,11 +46,21 @@ def interpolate_key_bond_map(sequence_obj):
     return key_bond_map
 
 
-def main(predictions, matched_spectra_db):
+def fit(predictions, matched_spectra_db):
     matched_spectra = take_best_predictions_spectra(predictions, matched_spectra_db)
     counter = Counter()
-    for glycopeptide, spectra in matched_spectra.iteritems():
+    for psm in matched_spectra.itervalues():
+        glycopeptide = psm["glycopeptide"]
+        matched = psm["spectra"]
         bond_map = interpolate_key_bond_map(sequence.Sequence(glycopeptide))
-        for spectrum in spectra:
+        for spectrum in matched:
             for tandem in spectrum.tandem_data:
-                print(len(tandem.annotation))
+                if len(tandem.annotation) > 0:
+                    annots = [ion for target, ion in tandem.annotation
+                              if (target == glycopeptide) and (is_backbone_ion(ion))]
+                    for annot in annots:
+                        counter[bond_map[annot]] += 1
+    counter = pd.Series(counter)
+    log_probabilities = np.log(counter / counter.sum())
+    return log_probabilities
+
