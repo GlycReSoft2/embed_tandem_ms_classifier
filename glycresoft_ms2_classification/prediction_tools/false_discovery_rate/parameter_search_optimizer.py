@@ -29,6 +29,16 @@ filter_terms_type_map = {
 }
 
 
+def fdr1(num_real, num_decoys, *args, **kwargs):
+    return num_decoys / float(num_real)
+
+def fdr2(num_real, num_decoys, *args, **kwargs):
+    return (num_decoys * 2)/float(num_real + num_decoys)
+
+def fdr3(num_real, num_decoys, ratio, *args, **kwargs):
+    return (num_decoys * (1 + (1/float(ratio)))) / float(num_real + num_decoys)
+
+
 def make_search_strategy(name, start="min", step_fn=inc(0.05), stop="max"):
     strategy = {
         "name": name,
@@ -83,14 +93,18 @@ class CountExclusion(object):
         dims = map(len, ranges)
         prediction_array = xray.DataArray(np.zeros(dims), dims=names, coords=ranges)
         decoy_array = xray.DataArray(np.zeros(dims), dims=names, coords=ranges)
+        if(len(names) > 1):
+            apply_fn = map
+        else:
+            apply_fn = lambda x, y: (x(y),)
 
         def slice_back(i):
             return slice(None, i)
         for feature_levels, owned_indices in self.predictions.groupby(names).groups.items():
-            prediction_array.loc[tuple(map(slice_back, feature_levels))] += len(owned_indices)
+            prediction_array.loc[tuple(apply_fn(slice_back, feature_levels))] += len(owned_indices)
 
         for feature_levels, owned_indices in self.decoys.groupby(names).groups.items():
-            decoy_array.loc[tuple(map(slice_back, feature_levels))] += len(owned_indices)
+            decoy_array.loc[tuple(apply_fn(slice_back, feature_levels))] += len(owned_indices)
 
         self.trials = np.divide(decoy_array * (1 + (1/self.decoy_ratio)), decoy_array + prediction_array).to_dataframe()
         self.trials.reset_index(drop=False, inplace=True)
