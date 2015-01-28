@@ -1,7 +1,5 @@
 import logging
-logger = logging.getLogger(__name__)
-
-import numpy as np
+logger = logging.getLogger("calculate_fdr")
 
 from glycresoft_ms2_classification import classify_matches
 from glycresoft_ms2_classification import match_ions2
@@ -119,7 +117,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
     logger.info("Evaluating predicates")
     fdr_search = optimize_fdr.CountExclusion(
         scored_matches_frame, decoy_matches_frame,
-        decoy_matches_frame.metadata["decoy_ratio"], ["MS2_Score", "peptideLens", "numStubs"])
+        decoy_matches_frame.metadata["decoy_ratio"], ["MS2_Score"])
     fdr_search.optimize()
 
     scored_matches_frame.metadata["fdr"] = fdr_search.compress()
