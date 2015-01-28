@@ -140,7 +140,6 @@ class Sequence(PeptideSequenceBase):
                 seq.mass += mod.mass
                 seq.mod_index[mod.name] += 1
             seq.seq.append([resid, mod_list])
-        seq.mass += Composition("H2O").mass
         if not isinstance(n_term, MoleculeBase):
             n_term = Modification(n_term)
         if not isinstance(c_term, MoleculeBase):
