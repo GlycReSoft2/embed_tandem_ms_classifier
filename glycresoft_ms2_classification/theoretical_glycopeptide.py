@@ -186,7 +186,7 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
         "enable_partial_hexnac_match": constants.PARTIAL_HEXNAC_LOSS
     }
 
-    metadata_store = SqliteDict(output_file, tablename="metadata")
+    metadata_store = SqliteDict(output_file, tablename="metadata", flag='n')
     metadata_store.update(metadata)
     metadata_store.commit()
 
