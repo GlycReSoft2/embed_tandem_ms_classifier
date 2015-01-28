@@ -1,4 +1,4 @@
-import json
+t
 from math import fabs
 from cStringIO import StringIO
 from types import MethodType
@@ -422,7 +422,7 @@ class PredictionResults(object):
         if frame is None and len(kwargs) == 0:
             frame = self.optimize_fdr()
         elif frame is None:
-            frame = pd.DataFrame()
+            frame = pd.DataFrame([{}])
         args = {k: v for k, v in frame.to_dict(orient="records")[0].items()
                 if k not in {"false_discovery_rate", "num_real_matches", "num_decoy_matches"}}
         args.update(kwargs)
