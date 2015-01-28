@@ -1,5 +1,5 @@
 import logging
-decoy_logger = logging.getLogger(__name__)
+decoy_logger = logging.getLogger("make_decoys")
 import argparse
 import multiprocessing
 import functools
@@ -40,7 +40,7 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
     ix, row = ix_prediction
     solutions = set()
     seq = Sequence(row.Glycopeptide_identifier).get_sequence(include_glycan=False)
-    #decoy_logger.info("[%s] Building decoys for  %s", pname, (ix, row.Glycopeptide_identifier, row.Calc_mass))
+    decoy_logger.info("[%s] Building %d decoys for  %s", pname, count, (ix, row.Glycopeptide_identifier, row.Calc_mass))
     solutions.add(seq)
     if not random_only:
         iter_count = 0
@@ -94,7 +94,7 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
             decoy_logger.error(e, exc_info=e)
             decoy_logger.warning("Decoy %s failed to be forged", decoy.Glycopeptide_identifier)
             raise
-
+    decoy_logger.info("Finished forging %d decoys for %s", len(decoy_search_space), row.Glycopeptide_identifier)
     shuffles.append((decoy_search_space, total_missing))
     return shuffles
 
@@ -184,14 +184,14 @@ def random_glycopeptide_to_fragments(sequence_record):
         "glyco_sites": len(glycan_map),
         "startAA": None,
         "endAA": None,
-        "Seq_with_mod": seq_obj.get_sequence(),
+        "Seq_with_mod": seq_obj.get_sequence(include_glycan=False),
         "bare_b_ions": b_ions,
         "b_ions_with_HexNAc": b_ions_HexNAc,
         "bare_y_ions": y_ions,
         "y_ions_with_HexNAc": y_ions_HexNAc,
         "pep_stub_ions": stub_ions,
         "Oxonium_ions": oxonium_ions,
-        "Glycopeptide_identifier": seq_obj.get_sequence() + glycan_composition_restring,
+        "Glycopeptide_identifier": seq_obj.get_sequence(include_glycan=False) + glycan_composition_restring,
         "_batch_id": int(sequence_record._batch_id)
     }
     return ions
@@ -209,7 +209,7 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
     metadata["decoy_ratio"] = count
 
     decoy_logger.info("Saving metadata")
-    metadata_store = sqlitedict.SqliteDict(decoy_path, tablename="metadata")
+    metadata_store = sqlitedict.SqliteDict(decoy_path, tablename="metadata", flag='n')
     metadata_store.update(metadata)
     metadata_store.commit()
     enzyme = predictions.metadata.get("enzyme")
@@ -234,7 +234,7 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
                                 builder=builder, random_only=random_only)
     decoy_logger.info("Beginning generation")
     decoy_sequence_store = sqlitedict.SqliteDict(decoy_path,
-                                                 tablename="theoretical_search_space")
+                                                 tablename="theoretical_search_space", flag='w')
     total_missing = 0
     preds_missed = []
     pool = None
