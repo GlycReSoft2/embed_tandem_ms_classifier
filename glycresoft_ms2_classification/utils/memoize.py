@@ -20,6 +20,7 @@ def memoize(maxsize=1000):
                     memo.popitem()
                 memo[key] = f(*args, **kwargs)
             return memo[key]
+        func.memo = memo
         return func
     return deco
 
