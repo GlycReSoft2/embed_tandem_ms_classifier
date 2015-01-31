@@ -10,3 +10,4 @@ try:
 except ImportError:
     print("Unable to import parts of prediction_tools")
 
+from .constants import constants

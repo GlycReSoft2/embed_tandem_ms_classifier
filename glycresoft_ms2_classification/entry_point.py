@@ -3,7 +3,6 @@ import logging
 try:
     logfile = "./.glycresoft-log"
     open(logfile, 'w').close()
-    print("logging to ./")
 except Exception, e:
     print(e)
     logfile = os.path.expanduser("~/.glycresoft-log")
@@ -26,19 +25,19 @@ from error_code_interface import *
 # Import the pipeline modules, wrapping any ImportErrors in the cross-runtime communication
 # exception.
 try:
+    from glycresoft_ms2_classification.utils import config_loader
     # Pipeline Steps as Modules
-    from structure.sequence_space import UnqualifiedModifierException
-    from structure.sequence_space import NoSitesFoundException
-    from proteomics.msdigest_xml_parser import MSDigestParamters
+    from glycresoft_ms2_classification.structure.sequence_space import UnqualifiedModifierException
+    from glycresoft_ms2_classification.structure.sequence_space import NoSitesFoundException
+    from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
 
-    import theoretical_glycopeptide
-    import match_ions2
-    import postprocess2
-    import calculate_fdr
-    from classify_matches import PrepareModelTask
-    from classify_matches import ClassifyTargetWithModelTask
-    from classify_matches import ModelDiagnosticsTask
-    #from classify_matches import CompareModelsDiagnosticTask
+    from glycresoft_ms2_classification import theoretical_glycopeptide
+    from glycresoft_ms2_classification import match_ions2
+    from glycresoft_ms2_classification import postprocess2
+    from glycresoft_ms2_classification import calculate_fdr
+    from glycresoft_ms2_classification.classify_matches import PrepareModelTask
+    from glycresoft_ms2_classification.classify_matches import ClassifyTargetWithModelTask
+    from glycresoft_ms2_classification.classify_matches import ModelDiagnosticsTask
 except ImportError, e:
     exception = ImportErrorWrapperException(str(e))
     print(exception)
@@ -162,27 +161,27 @@ def build_model_app_function(
 
 
 def classify_with_model_app_function(
-    ms1_results_file, glycosylation_sites_file, deconvoluted_spectra_file,
-    ms1_match_tolerance, ms2_match_tolerance,
+    ms1_results_file=None, glycosylation_sites_file=None, deconvoluted_spectra_file=None,
+    ms1_match_tolerance=None, ms2_match_tolerance=None,
     constant_modification_list=None, prefix_length=0, suffix_length=1,
     variable_modification_list=None, enzyme=None,
     method="full_random_forest", model_file=None,
     n_processes=4, random_only=False, decoy_to_real_ratio=20,
-        out=None):
-    theoretical_ion_space_file = generate_theoretical_ion_space(
-        ms1_results_file, glycosylation_sites_file,
-        constant_modification_list, variable_modification_list,
-        enzyme, out=out, n_processes=n_processes)
-    # print(theoretical_ion_space_file)
-    intermediary_files.append(theoretical_ion_space_file)
+    out=None, search_space_db_path=None):
+    if search_space_db_path is None:
+        theoretical_ion_space_file = generate_theoretical_ion_space(
+            ms1_results_file, glycosylation_sites_file,
+            constant_modification_list, variable_modification_list,
+            enzyme, out=out, n_processes=n_processes)
+        intermediary_files.append(theoretical_ion_space_file)
+    else:
+        theoretical_ion_space_file = search_space_db_path
     matched_ions_file = match_deconvoluted_ions(
         theoretical_ion_space_file, deconvoluted_spectra_file,
         ms1_match_tolerance, ms2_match_tolerance,
         n_processes=n_processes)
-    # print(matched_ions_file)
     intermediary_files.append(matched_ions_file)
     postprocessed_ions_file = postprocess_matches(matched_ions_file)
-    # print(postprocessed_ions_file)
     intermediary_files.append(postprocessed_ions_file)
     classification_results_file = classify_data_by_model(
         postprocessed_ions_file, method=method,
@@ -267,7 +266,7 @@ def main():
     import argparse
     app = argparse.ArgumentParser()
     subparsers = app.add_subparsers()
-
+    app.add_argument("-c", "--config", type=str, default=None, required=False, help="Path to configuration file")
     app.add_argument(
         "-d", "--debug", action='store_true', default=False, required=False)
     app.add_argument("-n", "--n-processes", type=int, action="store",
@@ -421,7 +420,9 @@ def main():
         args = args.__dict__
         func = args.pop("func")
         debug = args.pop("debug", os.environ.get("GLYCRESOFT_DEBUG", False))
-
+        config_path = args.pop("config")
+        if config_path is not None:
+            config_loader.load(config)
         if 'constant_modification_list' in args:
             args['constant_modification_list'] = uri_decode_list(
                 args['constant_modification_list'])

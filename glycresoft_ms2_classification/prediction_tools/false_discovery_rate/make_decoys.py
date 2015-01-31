@@ -4,6 +4,7 @@ import argparse
 import multiprocessing
 import functools
 import itertools
+import math
 import sqlitedict
 import random
 import re
@@ -20,6 +21,71 @@ sequence_tokenizer_respect_sequons = sequence.sequence_tokenizer_respect_sequons
 list_to_sequence = sequence.list_to_sequence
 strip_modifications = sequence.strip_modifications
 StubGlycopeptide = stub_glycopeptides.StubGlycopeptide
+
+
+def n_unique_elements(seq):
+    unique_elements = []
+    for i in range(len(seq)):
+        is_unique = True
+        cur = seq[i]
+        for pos in unique_elements:
+            if compare_positions(cur, pos):
+                is_unique = False
+                break
+        if is_unique:
+            unique_elements.append(cur)
+    return len(unique_elements)
+
+
+def permute_sequence(seq):
+    seq = copy.deepcopy(seq)
+    ix_a = ix_b = 0
+    length = len(seq) - 1
+    total_perms = math.factorial(n_unique_elements(seq))
+    perms_produced = 0
+    while perms_produced < total_perms:
+        ix_a = random.randint(0, length)
+        ix_b = random.randint(0, length)
+        if ix_a == ix_b:
+            continue
+        a = seq[ix_a]
+        b = seq[ix_b]
+        if compare_positions(a, b):
+            continue
+        seq[ix_a] = b
+        seq[ix_b] = a
+        perms_produced += 1
+        yield copy.deepcopy(seq)
+
+def compare_positions(a, b):
+    # Are the residues are the same and the number of modifications are equal?
+    res = (a[0] == b[0]) and (len(a[1]) == len(b[1]))
+    if not res:
+        return res
+    # Compare each modification
+    for i in range(len(a[1])):
+        res = (a[1][i] == b[1][i])
+        if not res:
+            return res
+    return res
+
+
+def clean_tokenizer(seq):
+    tokens, mods, glycan, n_term, c_term = sequence.sequence_tokenizer(seq)
+    return tokens
+
+
+def edit_distance(new_seq, prev_seq):
+    previous = range(len(clean_tokenizer(prev_seq)) + 1)
+    for i, new_pos in enumerate(clean_tokenizer(new_seq)):
+        current = [i + 1]
+        for j, prev_pos in enumerate(clean_tokenizer(prev_seq)):
+            insertions = previous[j + 1] + 1
+            deletions = current[j] + 1
+            substitutions = previous[j] + (not compare_positions(new_pos, prev_pos))
+            current.append(min(insertions, deletions, substitutions))
+        previous = current
+    return previous[-1]
 
 
 def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
@@ -48,16 +114,21 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
         pref = clone[:prefix_len]
         suf = clone[-suffix_len:]
         body = clone[prefix_len:(-suffix_len)]
+        n_unique = n_unique_elements(body)
+        min_diff = n_unique/3.0
         while(len(solutions) - 1 < count and iter_count < iter_max):
             # Permutations are very similar to the original sequence so first
             # transforming the sequence by shuffling it at random or reversing
             # it produce more heterogenous decoys
             # random.shuffle(body)
             body = body[::-1]
-            for shuffle in itertools.permutations(body):
+            prev = str(list_to_sequence(pref + list(body) + suf))
+            solutions.add(prev)
+            for shuffle in permute_sequence(body):  #itertools.permutations(body):
                 clone = pref + list(shuffle) + suf
                 res = str(list_to_sequence(clone))
-                solutions.add(res)
+                if edit_distance(res, prev) > (min_diff):
+                    solutions.add(res)
                 assert len(res) == len(seq)
                 if(len(solutions) - 1) >= count:
                     break
@@ -205,7 +276,7 @@ def taskmain(predictions_path, prefix_len=0, suffix_len=0,
     decoy_path = (predictions_path if out is None else out).rsplit("scored", 1)[0] + "decoy.db"
     metadata = predictions.metadata
     metadata = copy.deepcopy(metadata)
-    metadata["tag"] = (metadata["tag"] if metadata["tag"] not in {"", None} else "") + "decoy"
+    metadata["tag"] = (metadata["tag"] if metadata["tag"] not in ["", None] else "") + "decoy"
     metadata["decoy_ratio"] = count
 
     decoy_logger.info("Saving metadata")

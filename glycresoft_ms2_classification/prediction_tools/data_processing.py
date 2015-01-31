@@ -12,6 +12,7 @@ from .sequence_handling import get_sequence_length, compute_ion_coverage_map
 from .sequence_handling import modification_signature
 from .sequence_handling import find_occupied_glycosylation_sites
 from .sequence_handling import stubs_observed_expected_ratio
+from .constants import constants
 
 from ..structure import sequence
 from ..structure import modification
@@ -398,9 +399,21 @@ class PredictionResults(object):
             out = PredictionResults(self.metadata, out)
         return out
 
-    def score_naive(self, peptide_weight=0.5, hexnac_weight=0.5,
-                    uncovered_penalty_weight=1.0, stub_ion_weight=0.2,
-                    backbone_fragment_weight=0.8):
+    def score_naive(self, peptide_weight=None, hexnac_weight=None,
+                    uncovered_penalty_weight=None, stub_ion_weight=None,
+                    backbone_fragment_weight=None):
+        # Load defaults if parameters are not given
+        if peptide_weight is None:
+            peptide_weight = constants.peptide_weight
+        if hexnac_weight is None:
+            hexnac_weight = constants.hexnac_weight
+        if uncovered_penalty_weight is None:
+            uncovered_penalty_weight = constants.uncovered_penalty_weight
+        if stub_ion_weight is None:
+            stub_ion_weight = constants.stub_ion_weight
+        if backbone_fragment_weight is None:
+            backbone_fragment_weight = constants.backbone_fragment_weight
+
         if (peptide_weight + hexnac_weight) != 1.0:
             raise ValueError("Peptide and HexNAc Weights must sum to 1.0")
         backbone_fragment_score = (self.meanCoverage * peptide_weight) +\

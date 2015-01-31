@@ -3,6 +3,7 @@ import unittest
 import warnings
 import csv
 import logging
+logging.basicConfig(level="DEBUG", format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 from ConfigParser import ConfigParser
 
 config_file = "test.config"
