@@ -7,15 +7,15 @@ import sqlitedict
 class DefaultSqliteDict(sqlitedict.SqliteDict):
     def __init__(self, *args, **kwargs):
         factory_fn = kwargs.pop("default", None)
-        super(DefaultSqliteDict, self).__init__(*args, **kwargs)
+        sqlitedict.SqliteDict.__init__(self, *args, **kwargs)
         self.default_factory = factory_fn
 
     def __getitem__(self, key):
         try:
-            return super(DefaultSqliteDict, self).__getitem__(key)
+            return sqlitedict.SqliteDict.__getitem__(self, key)
         except KeyError, e:
             if self.default_factory is not None:
-                super(DefaultSqliteDict, self).__setitem__(key, self.default_factory())
+                self.__setitem__(key, self.default_factory())
                 return self[key]
             else:
                 raise e

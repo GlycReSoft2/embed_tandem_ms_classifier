@@ -100,14 +100,14 @@ def prepare_model_file(postprocessed_ions_file, method="full_random_forest", out
 def classify_data_by_model(
     postprocessed_ions_file, model_file_path, method="full_random_forest", out=None, method_init_args=None,
         method_fit_args=None):
-    try:
-        task = ClassifyTargetWithModelTask(
-            model_file_path, postprocessed_ions_file, method=method, output_path=out,
-            method_init_args=method_init_args, method_fit_args=method_fit_args)
-        result = task.run()
-        return result
-    except Exception, e:
-        raise ClassificationException(str(e))
+    #try:
+    task = ClassifyTargetWithModelTask(
+        model_file_path, postprocessed_ions_file, method=method, output_path=out,
+        method_init_args=method_init_args, method_fit_args=method_fit_args)
+    result = task.run()
+    return result
+    #except Exception, e:
+    #    raise ClassificationException(str(e))
 
 
 def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra=None, model_file_path=None,
@@ -422,7 +422,7 @@ def main():
         debug = args.pop("debug", os.environ.get("GLYCRESOFT_DEBUG", False))
         config_path = args.pop("config")
         if config_path is not None:
-            config_loader.load(config)
+            config_loader.load(config_path)
         if 'constant_modification_list' in args:
             args['constant_modification_list'] = uri_decode_list(
                 args['constant_modification_list'])

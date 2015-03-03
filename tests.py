@@ -29,6 +29,10 @@ from glycresoft_ms2_classification.structure import composition
 
 from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import random_glycopeptide
 
+from glycresoft_ms2_classification.utils import config_loader
+
+config_loader.load("base.config")
+
 def try_type(obj):
     try:
         return int(obj)

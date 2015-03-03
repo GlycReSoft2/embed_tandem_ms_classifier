@@ -490,9 +490,13 @@ class PredictionResults(object):
     @staticmethod
     def ensure_fields(raw_predictions, recompute=False):
         data = pd.DataFrame(raw_predictions)
-        data.Peptide_mod = data.Peptide_mod.astype(str).replace("nan", "")
-        # Handle Decoys
-        data.ix[np.isnan(data.vol)].vol = -1
+        try:
+            data['Peptide_mod'] = data["Peptide_mod"].astype(str).replace("nan", "")
+            # Handle Decoys
+            data.ix[np.isnan(data.vol)].vol = -1
+        except:
+            data['Peptide_mod'] = ""
+            data.vol = -1
         try:
             data.ix[data.startAA.isnull()].startAA = -1
             data.ix[np.isnan(data.startAA)].startAA = -1
