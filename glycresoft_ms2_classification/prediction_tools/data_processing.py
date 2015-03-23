@@ -498,12 +498,12 @@ class PredictionResults(object):
             data['Peptide_mod'] = ""
             data.vol = -1
         try:
-            data.ix[data.startAA.isnull()].startAA = -1
+            data.ix[data["startAA"].isnull()]["startAA"] = -1
             data.ix[np.isnan(data.startAA)].startAA = -1
-        except TypeError:
-            data.startAA = -1
+        except TypeError, AttributeError:
+            data["startAA"] = -1
         try:
-            data.ix[data.endAA.isnull()].endAA = -1
+            data.ix[data["endAA"].isnull()].endAA = -1
             data.ix[np.isnan(data.endAA)].endAA = -1
         except TypeError:
             data.endAA = -1
