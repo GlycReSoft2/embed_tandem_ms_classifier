@@ -43,6 +43,90 @@ cdef list theoretical_ion_list(list dict_ions):
     return results
 
 
+cdef list merge_observed_matches(list matches):
+    cdef defaultdict merge_dict = defaultdict(list)
+    cdef int i = 0
+    cdef Match match
+    cdef list results = []
+    for i in range(0, len(matches)):
+        match = matches[i]
+        merge_dict[match.key].append(match)
+
+    for key, group in merge_dict:
+        results.append(merge_group(group))
+
+    return results
+
+cdef MatchGroup merge_group(list matches):
+    cdef:
+        double best_ppm = fabs(matches[0].ppm_error)
+        double current_ppm
+        Match best_match = matches[0]
+        Match match
+        int i = 1
+        dict scan_id_to_ppm = dict()
+        MatchGroup merged
+
+    for i in range(i, len(matches)):
+        match = matches[i]
+        current_ppm = fabs(match.ppm_error)
+        if current_ppm < best_ppm:
+            best_ppm = current_ppm
+            best_match = match
+        scan_id_to_ppm[match.scan_id] = match.ppm_error
+
+    merged = MatchGroup(best_match.ppm_error, best_match.obs_ion,
+                        best_match.key, best_match.scan_id, scan_id_to_ppm)
+    return merged
+
+
+cdef class MatchGroup:
+    cdef:
+        public double ppm_error
+        public double obs_ion
+        public str key
+        public int scan_id
+        public dict scan_map
+
+    def __init__(self, double ppm_error, double obs_ion, str key, int scan_id, dict scan_map):
+        if scan_map is None:
+            scan_map = dict()
+        self.ppm_error = ppm_error
+        self.obs_ion = obs_ion
+        self.key = key
+        self.scan_id = scan_id
+        self.scan_map = scan_map
+
+    cpdef dict as_dict(self):
+        cdef dict result = {}
+        result['ppm_error'] = self.ppm_error
+        result['obs_ion'] = self.obs_ion
+        result['key'] = self.key
+        result['scan_id'] = self.scan_id
+        result['scan_map'] = self.scan_map
+
+
+cdef class Match:
+    cdef:
+        public double ppm_error
+        public double obs_ion
+        public str key
+        public int scan_id
+
+    def __init__(self, double ppm_error, double obs_ion, str key, int scan_id=-1):
+        self.ppm_error = ppm_error
+        self.obs_ion = obs_ion
+        self.key = key
+        self.scan_id = scan_id
+
+    cpdef dict as_dict(self):
+        cdef dict result = {}
+        result['ppm_error'] = self.ppm_error
+        result['obs_ion'] = self.obs_ion
+        result['key'] = self.key
+        result['scan_id'] = self.scan_id
+
+
 cdef class CObservedPrecursorSpectrum:
     cdef public double neutral_mass
     cdef int charge

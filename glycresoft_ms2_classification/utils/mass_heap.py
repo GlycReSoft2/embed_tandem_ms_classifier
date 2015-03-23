@@ -53,6 +53,15 @@ class PMassHeap(object):
             else:
                 break
 
+    def get_higher_than(self, mass):
+        dummy = self.carrier
+        dummy.mass = mass
+        for item in reversed(self.container):
+            if item > dummy:
+                yield item.object
+            else:
+                break
+
     def __repr__(self):
         return repr(self.contents)
 

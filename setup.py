@@ -84,10 +84,10 @@ def run_setup(include_cext=True):
         ext_modules=extensions if include_cext else None,
         entry_points={
             'console_scripts': [
-                "glycresoft-ms2 = glycresoft_ms2_classification.entry_point:main",
+                "glycresoft-ms2 = glycresoft_ms2_classification.__main__:main",
             ],
             'setuptools.installation': [
-                "eggsecutable = glycresoft_ms2_classification.entry_point:main"
+                "eggsecutable = glycresoft_ms2_classification.__main__:main"
             ]
         },
         namespace_packages=["glycresoft_ms2_classification"]

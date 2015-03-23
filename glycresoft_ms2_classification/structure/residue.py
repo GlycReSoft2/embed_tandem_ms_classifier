@@ -58,6 +58,7 @@ residue_table = {
 
 
 class Residue(ResidueBase):
+    __slots__ = ["name", "symbol", "mass"]
 
     @staticmethod
     @memoize()
@@ -67,27 +68,27 @@ class Residue(ResidueBase):
         return composition_to_mass(formula)
 
     """Basic mass values for peptide sequences"""
-    def __init__(self, aa='', symbol=None):
-        self.symbol = None
-        self.name = None
+    def __init__(self, symbol=None, name=None):
+        self.symbol = symbol
+        self.name = name
         self.mass = 0.0
         if symbol is not None:
             self.by_symbol(symbol)
-        else:
-            self.by_name(aa)
+        elif name is not None:
+            self.by_name(name)
 
     def by_name(self, name):
-        self.compo = residue_table.get(name)
+        self.compo = residue_table[name]
         self.name = name
-        if self.compo is not None:
-            self.mass = composition_to_mass(self.compo)
-        else:
-            self.mass = 0.0
+        self.mass = composition_to_mass(self.compo)
+        self.symbol = residue_to_symbol[name]
 
     def by_symbol(self, symbol):
-        name = symbol_to_residue[symbol]
-        self.by_name(name)
-        self.symbol = symbol
+        try:
+            name = symbol_to_residue[symbol]
+            self.by_name(name)
+        except KeyError:
+            self.by_name(symbol)
 
     def __repr__(self):
         return self.name

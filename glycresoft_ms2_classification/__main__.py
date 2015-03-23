@@ -6,7 +6,13 @@ import sys
 # pip or easy_install?
 sys.path = [(os.path.dirname(os.path.abspath(__file__)))] + sys.path
 
-import entry_point
+
+entry_point = __import__(
+    "glycresoft_ms2_classification.entry_point").entry_point
+
+
+def main():
+    entry_point.main()
 
 if __name__ == '__main__':
-    entry_point.main()
+    main()

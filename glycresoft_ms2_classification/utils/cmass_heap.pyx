@@ -48,6 +48,17 @@ cdef class MassHeap(object):
             else:
                 break
 
+    def get_higher_than(self, float mass):
+        cdef MassCarrier dummy = self.carrier
+        dummy.mass = mass
+        cdef MassWrapper item
+
+        for item in reversed(self.contents):
+            if item > dummy:
+                yield item.obj
+            else:
+                break
+
     def __getitem__(self, index):
         return self.contents[index]
 

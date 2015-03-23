@@ -110,6 +110,8 @@ class Sequence(PeptideSequenceBase):
     Represents a peptide that may have post-translational modifications
     including glycosylation.
     '''
+    position_class = list
+
     @classmethod
     def from_iterable(cls, iterable):
         seq = cls("")
@@ -139,7 +141,7 @@ class Sequence(PeptideSequenceBase):
                 mod_list.append(mod)
                 seq.mass += mod.mass
                 seq.mod_index[mod.name] += 1
-            seq.seq.append([resid, mod_list])
+            seq.seq.append(cls.position_class([resid, mod_list]))
         if not isinstance(n_term, MoleculeBase):
             n_term = Modification(n_term)
         if not isinstance(c_term, MoleculeBase):
@@ -166,7 +168,7 @@ class Sequence(PeptideSequenceBase):
                         mods.append(mod)
                         self.mod_index[mod.name] += 1
                         self.mass += mod.mass
-                self.seq.append([res, mods])
+                self.seq.append(self.position_class([res, mods]))
             except:
                 print(sequence)
                 print(item)
@@ -300,8 +302,7 @@ class Sequence(PeptideSequenceBase):
 
     def break_at(self, idx):
         b_shift = Composition('H').mass - Composition('e').mass
-        y_shift = Composition(
-            'H2O').mass + Composition('H').mass - Composition('e').mass
+        y_shift = Composition('H2O').mass + Composition('H').mass - Composition('e').mass
 
         mod_b = defaultdict(int)
         mass_b = 0
@@ -340,7 +341,7 @@ class Sequence(PeptideSequenceBase):
 
         return b_frag, y_frag
 
-    def get_fragments(self, kind, include_golden_pairs=True):
+    def get_fragments(self, kind, include_golden_pairs=False):
         """Return a list of mass values for each fragment of `kind`"""
 
         mass_shift = 0.0
@@ -476,7 +477,7 @@ class Sequence(PeptideSequenceBase):
             next_pos.append([modification])
             self.mass += modification.mass
             self.mod_index[modification.name] += 1
-        self.seq.append(next_pos)
+        self.seq.append(self.position_class(next_pos))
 
     def extend(self, sequence):
         if not isinstance(sequence, PeptideSequenceBase):
@@ -579,11 +580,14 @@ def sequence_tokens_to_mass(tokens):
 
 
 class SimplePeptide(object):
-    def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None, mod_index=None):
+    def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None, mod_index=None, length=None):
         self.sequence = str(sequence_str)
-        tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
-        self.mass = sequence_to_mass(sequence_str) if mass is None else mass
-        self.length = len(tokens)
+        self.mass = sequence_to_mass(self.sequence) if mass is None else mass
+        if length is None:
+            tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
+            self.length = len(tokens)
+        else:
+            self.length = length
         self.missed_cleavages = missed_cleavages
         self.cleaver = cleaver
         self.mod_index = mod_index if mod_index is not None else {}
@@ -606,3 +610,9 @@ class SimplePeptide(object):
 
     def __repr__(self):
         return "{0}:{1}".format(self.sequence, (self.mass, self.missed_cleavages))
+
+    def __iter__(self):
+        tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
+        for tok in tokens:
+            yield (Residue(symbol=tok[0]),
+                   tuple(Modification(s) for s in tok[1] if s != ''))

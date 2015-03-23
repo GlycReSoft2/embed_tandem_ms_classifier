@@ -62,6 +62,11 @@ class DeconIOBase(object):
     def __getitem__(self, ix):
         return self.data[ix]
 
+    def get_db_filename(self, file_path=None):
+        if file_path is None:
+            file_path = self.file_path + '.db'
+        return file_path
+
     def to_db(self, file_path=None, overwrite=True):
         if file_path is None:
             file_path = self.file_path + '.db'

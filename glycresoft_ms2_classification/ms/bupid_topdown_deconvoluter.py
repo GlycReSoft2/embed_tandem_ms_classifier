@@ -39,9 +39,9 @@ class BUPIDYamlParser(DeconIOBase):
             tandem_data = [ObservedTandemSpectrum(*ion) for
                            ion in itertools.izip(
                                peak_data["mass"], peak_data["z"], peak_data["intensity"])
-                           if (ion[1] <= precursor_charge) #and
+                           if (ion[1] <= precursor_charge)  # and
                            #   (ion[1] <= ms_constants.MAX_FRAGMENT_CHARGE_STATE) and
-                           #mass_charge_ratio(ion[0], ion[1]) <= ms_constants.MACHINE_ACQUISITION_RANGE
+                           # mass_charge_ratio(ion[0], ion[1]) <= ms_constants.MACHINE_ACQUISITION_RANGE
                            ]
             for tand in tandem_data:
                 tand.id = ion_id
