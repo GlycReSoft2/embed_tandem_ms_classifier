@@ -90,15 +90,27 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
     did_match_counter = Counter()
     annotate = defaultdict(list)
     fabs = math.fabs
+
+    scan_id_range = []
+
+    oxoniums = []
+    b_type = []
+    all_b_ions = []
+    b_HexNAc_type = []
+    y_type = []
+    all_y_ions = []
+    y_HexNAc_type = []
+    stub_type = []
+
     for real_ions in db.ppm_match_tolerance_search(obs_mass, ms1_tolerance):
         real_ions = ObservedPrecursorSpectrum.from_sql(real_ions, db)
         scan_id = real_ions.scan_ids[0]
+        scan_id_range.append(scan_id)
         tandem_ms_ind = real_ions.id
         did_match_counter[tandem_ms_ind] += 1
 
         Oxonium_ions = theoretical['Oxonium_ions']
 
-        oxoniums = []
         for ox_ion in Oxonium_ions:
             try:
                 kind = ox_ion['key']
@@ -117,8 +129,6 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
         # checking for b and y ions and ions with HexNAc:
         b_ions = theoretical['bare_b_ions']
         b_len = float(len(b_ions))
-        b_type = []
-        all_b_ions = []
         for theo_ions in b_ions:
             frag_mass = float(theo_ions["mass"])
             deprotonated_ion = frag_mass - Proton
@@ -135,7 +145,6 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
         b_HexNAc_ions = theoretical['b_ions_with_HexNAc']
-        b_HexNAc_type = []
         for theo_ions in b_HexNAc_ions:
             frag_mass = float(theo_ions["mass"])
             deprotonated_ion = frag_mass - Proton
@@ -154,8 +163,6 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
 
         y_ions = list(theoretical['bare_y_ions'])
         y_len = float(len(y_ions))
-        y_type = []
-        all_y_ions = []
         for theo_ions in y_ions:
             frag_mass = float(theo_ions["mass"])
             deprotonated_ion = frag_mass - Proton
@@ -172,7 +179,6 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
         y_HexNAc_ions = theoretical['y_ions_with_HexNAc']
-        y_HexNAc_type = []
         for theo_ions in y_HexNAc_ions:
             frag_mass = float(theo_ions["mass"])
             deprotonated_ion = frag_mass - Proton
@@ -191,7 +197,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
 
         # checking for stub ions
         stub_ions = theoretical['pep_stub_ions']
-        stub_type = []
+
         for theo_ions in stub_ions:
             frag_mass = float(theo_ions["mass"])
             deprotonated_ion = frag_mass - Proton
@@ -204,29 +210,36 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                          "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
-        results.append({
-            "MS1_Score": theoretical["MS1_Score"], "Obs_Mass": theoretical["Obs_Mass"],
-            "Calc_mass": theoretical["Calc_mass"],
-            "ppm_error": theoretical["ppm_error"], "Peptide": theoretical["Peptide"],
-            "Peptide_mod": theoretical["Peptide_mod"],
-            "Glycan": theoretical["Glycan"],
-            "vol": theoretical["vol"], "glyco_sites": theoretical["glyco_sites"],
-            "startAA": theoretical["startAA"], "endAA": theoretical["endAA"],
-            "Seq_with_mod": theoretical["Seq_with_mod"],
-            "Glycopeptide_identifier": theoretical["Seq_with_mod"] + theoretical["Glycan"],
-            "Oxonium_ions": oxoniums, "bare_b_ions": b_type, "possible_b_ions_HexNAc": len(b_HexNAc_ions),
-            "total_b_ions": b_len, "bare_y_ions": y_type, "possible_y_ions_HexNAc": len(y_HexNAc_ions),
-            "total_y_ions": y_len, "b_ions_with_HexNAc": b_HexNAc_type,
-            "y_ions_with_HexNAc": y_HexNAc_type,
-            "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type,
-            "scan_id": scan_id,
-            "scan_id_range": []
-        })
+    results.append({
+        "MS1_Score": theoretical["MS1_Score"], "Obs_Mass": theoretical["Obs_Mass"],
+        "Calc_mass": theoretical["Calc_mass"],
+        "ppm_error": theoretical["ppm_error"], "Peptide": theoretical["Peptide"],
+        "Peptide_mod": theoretical["Peptide_mod"],
+        "Glycan": theoretical["Glycan"],
+        "vol": theoretical["vol"], "glyco_sites": theoretical["glyco_sites"],
+        "startAA": theoretical["startAA"], "endAA": theoretical["endAA"],
+        "Seq_with_mod": theoretical["Seq_with_mod"],
+        "Glycopeptide_identifier": theoretical["Seq_with_mod"] + theoretical["Glycan"],
+        "possible_b_ions_HexNAc": len(b_HexNAc_ions),
+        "total_b_ions": b_len, "possible_y_ions_HexNAc": len(y_HexNAc_ions),
+        "total_y_ions": y_len,
+
+        "Oxonium_ions": merge_ion_matches(oxoniums),
+        "bare_b_ions": merge_ion_matches(b_type),
+        "bare_y_ions": merge_ion_matches(y_type),
+        "b_ions_with_HexNAc": merge_ion_matches(b_HexNAc_type),
+        "y_ions_with_HexNAc": merge_ion_matches(y_HexNAc_type),
+        "b_ion_coverage": merge_ion_matches(all_b_ions),
+        "y_ion_coverage": merge_ion_matches(all_y_ions),
+        "Stub_ions": merge_ion_matches(stub_type),
+        "scan_id": scan_id_range[0],
+        "scan_id_range": scan_id_range
+    })
 
     return results, did_match_counter, annotate
 
 
-def match_observed_to_theoretical(theoretical, observed_ions, ms1_tolerance, ms2_tolerance):
+def iterative_pooling_matcher(theoretical, observed_ions, ms1_tolerance, ms2_tolerance):
     theoretical_sequence = theoretical["Seq_with_mod"] + theoretical["Glycan"]
     calc_mass = float(theoretical['Calc_mass'])
     results = []
@@ -376,6 +389,7 @@ def merge_by_glycopeptide_sequence(matches):
     merged_matches.commit()
     return merged_matches
 
+
 fields_to_merge = [
     "Oxonium_ions",
     "bare_b_ions",
@@ -439,8 +453,9 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
 
     pool = multiprocessing.Pool(n_processes)
 
-    #theoretical_search_space = try_deserialize(theo_fragment_file)
-    theoretical_search_space = sqlitedict.SqliteDict(db_file, tablename="theoretical_search_space")
+    # theoretical_search_space = try_deserialize(theo_fragment_file)
+    theoretical_search_space = sqlitedict.SqliteDict(
+        db_file, tablename="theoretical_search_space")
     # if outfile is None:
     #     outfile = try_get_outfile(theoretical_search_space, "match_frags")
 
@@ -460,7 +475,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
 
     logging.info("Run tag: %s", tag)
     theoretical_fragments = theoretical_search_space.itervalues()
-    fragment_match_store = sqlitedict.SqliteDict(db_file, tablename="ion_matches_unmerged")
+    fragment_match_store = sqlitedict.SqliteDict(db_file, tablename="matched_ions", journal_mode="OFF")
 
     did_match_counter = Counter()
     annotate_accumulator = defaultdict(list)
@@ -468,8 +483,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     logger.info("Indexing observed ions")
     db = data.to_db()
     logger.info("Index built.")
-    # task_fn = functools.partial(match_observed_to_theoretical, ms1_tolerance=ms1_tolerance,
-    #                             ms2_tolerance=ms2_tolerance, observed_ions=data)
+
     match_fn = match_observed_to_theoretical_sql
     if use_cython:
         logger.info("Using Cython")
@@ -481,9 +495,8 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     if n_processes > 1:
         logger.debug("Matching concurrently")
         matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
-                                               chunksize=5000)
+                                               chunksize=750)
         for matches, counter, annotater in matching_process:
-            #results.extend(matches)
             for m in matches:
                 fragment_match_store[cntr] = m
                 cntr += 1
@@ -493,7 +506,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
         logger.debug("Matching sequentially")
         for theoretical in theoretical_fragments:
             matches, counter, annotater = task_fn(theoretical)
-            #results.extend(matches)
+            # results.extend(matches)
             for m in matches:
                 fragment_match_store[cntr] = m
                 cntr += 1
@@ -508,9 +521,6 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     fragment_match_store.commit()
     # save_unmerged = multiprocessing.Process(target=save_interm, args=(results, "unmerged-matches"))
     # save_unmerged.start()
-
-
-    merged_results = merge_by_glycopeptide_sequence(fragment_match_store)
 
     # results = {
     #     "metadata": metadata,
@@ -527,11 +537,12 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                               "{root}.{tag}".format(root=splitext(decon_data)[0],
                                                     tag=tag))
 
-    return merged_results.filename  #outfile + '.json', results
+    return fragment_match_store.filename  # outfile + '.json', results
 
 
 def taskmain():
     import argparse
+    logging.basicConfig(level='DEBUG')
     app = argparse.ArgumentParser("match-frags")
     app.add_argument("theoretical_fragments")
     app.add_argument("observed_ions")

@@ -43,8 +43,8 @@ cdef list theoretical_ion_list(list dict_ions):
     return results
 
 
-cdef list merge_observed_matches(list matches):
-    cdef defaultdict merge_dict = defaultdict(list)
+cpdef list merge_observed_matches(list matches):
+    merge_dict = defaultdict(list)
     cdef int i = 0
     cdef Match match
     cdef list results = []
@@ -52,20 +52,24 @@ cdef list merge_observed_matches(list matches):
         match = matches[i]
         merge_dict[match.key].append(match)
 
-    for key, group in merge_dict:
-        results.append(merge_group(group))
+    for key, group in merge_dict.items():
+        results.append(merge_group(group).as_dict())
 
     return results
 
-cdef MatchGroup merge_group(list matches):
+
+cpdef MatchGroup merge_group(list matches):
     cdef:
         double best_ppm = fabs(matches[0].ppm_error)
         double current_ppm
         Match best_match = matches[0]
         Match match
         int i = 1
+        double sum_intensity = 0
         dict scan_id_to_ppm = dict()
         MatchGroup merged
+
+    scan_id_to_ppm[matches[0].scan_id] = matches[0].ppm_error
 
     for i in range(i, len(matches)):
         match = matches[i]
@@ -73,9 +77,12 @@ cdef MatchGroup merge_group(list matches):
         if current_ppm < best_ppm:
             best_ppm = current_ppm
             best_match = match
-        scan_id_to_ppm[match.scan_id] = match.ppm_error
+        scan_id_to_ppm[match.scan_id] = dict(ppm_error=match.ppm_error, 
+                                             intensity=match.intensity,
+                                             charge=match.charge)
+        sum_intensity += match.intensity
 
-    merged = MatchGroup(best_match.ppm_error, best_match.obs_ion,
+    merged = MatchGroup(best_match.ppm_error, best_match.obs_ion, sum_intensity,
                         best_match.key, best_match.scan_id, scan_id_to_ppm)
     return merged
 
@@ -86,13 +93,16 @@ cdef class MatchGroup:
         public double obs_ion
         public str key
         public int scan_id
+        public double intensity
         public dict scan_map
 
-    def __init__(self, double ppm_error, double obs_ion, str key, int scan_id, dict scan_map):
+    def __init__(self, double ppm_error, double obs_ion, double intensity,
+                 str key, int scan_id, dict scan_map):
         if scan_map is None:
             scan_map = dict()
         self.ppm_error = ppm_error
         self.obs_ion = obs_ion
+        self.intensity = intensity
         self.key = key
         self.scan_id = scan_id
         self.scan_map = scan_map
@@ -101,21 +111,32 @@ cdef class MatchGroup:
         cdef dict result = {}
         result['ppm_error'] = self.ppm_error
         result['obs_ion'] = self.obs_ion
+        result["intensity"] = self.intensity
         result['key'] = self.key
         result['scan_id'] = self.scan_id
-        result['scan_map'] = self.scan_map
+        result['scan_map'] = dict(self.scan_map)
+        return result
+
+    def __repr__(MatchGroup self):
+        return "<MatchGroup {0} {1} {2} {3} {4}>".format(self.key, self.ppm_error, 
+                                                         self.intensity, self.scan_id, self.scan_map)
 
 
 cdef class Match:
     cdef:
         public double ppm_error
         public double obs_ion
+        public double intensity
+        public int charge
         public str key
         public int scan_id
 
-    def __init__(self, double ppm_error, double obs_ion, str key, int scan_id=-1):
+    def __init__(self, double ppm_error, double obs_ion, double intensity,
+                 int charge, str key, int scan_id=-1):
         self.ppm_error = ppm_error
         self.obs_ion = obs_ion
+        self.intensity = intensity
+        self.charge = charge
         self.key = key
         self.scan_id = scan_id
 
@@ -123,9 +144,15 @@ cdef class Match:
         cdef dict result = {}
         result['ppm_error'] = self.ppm_error
         result['obs_ion'] = self.obs_ion
+        result['intensity'] = self.intensity
+        result['charge'] = self.charge
         result['key'] = self.key
         result['scan_id'] = self.scan_id
+        return result
 
+    def __repr__(Match self):
+        return "<Match {0} {1} {2} {3} {4}>".format(self.key, self.ppm_error, self.intensity, 
+                                                    self.charge, self.scan_id)
 
 cdef class CObservedPrecursorSpectrum:
     cdef public double neutral_mass
@@ -178,9 +205,9 @@ cdef CObservedPrecursorSpectrum CObservedPrecursorSpectrum_from_sql(object row):
 
 cdef class CObservedTandemSpectrum:
     cdef public double mass
-    cdef int charge
-    cdef double intensity
-    cdef public  int id
+    cdef public int charge
+    cdef public double intensity
+    cdef public int id
     cdef list annotation
     cdef dict other_data
 
@@ -226,12 +253,13 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
     cdef list results
     results = []
     cdef double obs_mass, deprotonated_mass, ppm
-    cdef int total_b, total_y, total_b_hex, total_y_hex
     cdef str theoretical_sequence
     theoretical_sequence = str(theoretical["Glycopeptide_identifier"])
-    cdef list theoretical_ions, oxonoiums, b_type, all_b_ions
-    cdef list b_HexNAc_type, y_type, all_y_ions, y_HexNAc_type
-    cdef list stub_type
+    
+    cdef int total_b = 0, total_y = 0, total_b_hex = 0, total_y_hex = 0
+    cdef list theoretical_ions = [], oxonoiums = [], b_type = [], all_b_ions = []
+    cdef list b_HexNAc_type = [], y_type = [], all_y_ions = [], y_HexNAc_type = []
+    cdef list stub_type = [], scan_id_range = [], oxoniums = []
 
     cdef:
         list theo_oxoniums, theo_b_type, theo_b_HexNAc_type
@@ -251,10 +279,11 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
     for i in range(len(observed)):
         real_ion = observed[i]
         scan_id = real_ion.scan_ids[0]
+        scan_id_range.append(scan_id)
         tandem_ms_ind = real_ion.id
         did_match_counter[tandem_ms_ind] += 1
 
-        oxoniums = list()
+
         for theo_i in range(len(theo_oxoniums)):
             theo_ion = theo_oxoniums[theo_i]
             deprotonated_mass = theo_ion.mass
@@ -263,20 +292,19 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                 obs_mass = real_tandem.mass
                 ppm = ppm_error(obs_mass + Proton, deprotonated_mass)
                 if fabs(ppm) <= ms2_tolerance:
-                    oxoniums.append({
-                        "ion": obs_mass + Proton,
-                        "ppm_error": ppm * 1e6,
-                        "key": theo_ion.key,
-                        "scan_id": tandem_ms_ind
-                    })
+                    oxoniums.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key,
+                        tandem_ms_ind))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
-        b_type = []
-        all_b_ions = []
 
         total_b = len(theo_b_type)
-        b_type = []
-        all_b_ions = []
+        # b_type = []
+        # all_b_ions = []
 
         for theo_i in range(len(theo_b_type)):
             theo_ion = theo_b_type[theo_i]
@@ -286,17 +314,20 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                 obs_mass = real_tandem.mass
                 ppm = ppm_error(obs_mass, deprotonated_mass)
                 if fabs(ppm) <= ms2_tolerance:
-                    b_type.append({
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key,
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    })
+                    b_type.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key,
+                        tandem_ms_ind
+                    ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
         all_b_ions.extend(b_type)
 
+
         total_b_hex = len(theo_b_HexNAc_type)
-        b_HexNAc_type = []
+        # b_HexNAc_type = []
         for theo_i in range(len(theo_b_HexNAc_type)):
             theo_ion = theo_b_HexNAc_type[theo_i]
             deprotonated_mass = theo_ion.mass - Proton
@@ -305,24 +336,23 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                 obs_mass = real_tandem.mass
                 ppm = ppm_error(obs_mass, deprotonated_mass)
                 if fabs(ppm) <= ms2_tolerance:
-                    b_HexNAc_type.append({
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key,
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    })
-                    all_b_ions.append(
-                    {
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key.split("+")[0],
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    }
-                    )
+                    b_HexNAc_type.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key,
+                        tandem_ms_ind
+                    ))
+                    all_b_ions.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        theo_ion.key.split("+")[0],
+                        tandem_ms_ind
+                    ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
-        y_type = []
-        all_y_ions = []
+
         total_y = len(theo_y_type)
         for theo_i in range(len(theo_y_type)):
             theo_ion = theo_y_type[theo_i]
@@ -332,16 +362,19 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                 obs_mass = real_tandem.mass
                 ppm = ppm_error(obs_mass, deprotonated_mass)
                 if fabs(ppm) <= ms2_tolerance:
-                    y_type.append({
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key,
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    })
+                    y_type.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key,
+                        tandem_ms_ind
+                    ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
+
         total_y_hex = len(theo_y_HexNAc_type)
-        y_HexNAc_type = []
+
         for theo_i in range(len(theo_y_HexNAc_type)):
             theo_ion = theo_y_HexNAc_type[theo_i]
             deprotonated_mass = theo_ion.mass - Proton
@@ -350,23 +383,26 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                 obs_mass = real_tandem.mass
                 ppm = ppm_error(obs_mass, deprotonated_mass)
                 if fabs(ppm) <= ms2_tolerance:
-                    y_HexNAc_type.append({
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key,
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    })
-                    all_y_ions.append(
-                    {
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key.split("+")[0],
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    }
-                    )
+                    y_HexNAc_type.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key,
+                        tandem_ms_ind
+                    ))
+                    all_y_ions.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key.split("+")[0],
+                        tandem_ms_ind
+                    ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
-        stub_type = []
+
+
         for theo_i in range(len(theo_stubs)):
             theo_ion = theo_stubs[theo_i]
             deprotonated_mass = theo_ion.mass - Proton
@@ -375,14 +411,17 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                 obs_mass = real_tandem.mass
                 ppm = ppm_error(obs_mass, deprotonated_mass)
                 if fabs(ppm) <= ms2_tolerance:
-                    stub_type.append({
-                        "obs_ion": obs_mass + Proton,
-                        "key": theo_ion.key,
-                        "ppm_error": ppm * 1e6,
-                        "scan_id": tandem_ms_ind
-                    })
+                    stub_type.append(Match(
+                        ppm * 1e6,
+                        obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
+                        theo_ion.key,
+                        tandem_ms_ind
+                    ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
+    if len(did_match_counter) > 0:
         results.append({
             "MS1_Score": theoretical["MS1_Score"], "Obs_Mass": theoretical["Obs_Mass"],
             "Calc_mass": theoretical["Calc_mass"],
@@ -393,13 +432,24 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
             "startAA": theoretical["startAA"], "endAA": theoretical["endAA"],
             "Seq_with_mod": theoretical["Seq_with_mod"],
             "Glycopeptide_identifier": theoretical["Seq_with_mod"] + theoretical["Glycan"],
-            "Oxonium_ions": oxoniums, "bare_b_ions": b_type, "possible_b_ions_HexNAc": total_b_hex,
-            "total_b_ions": total_b, "bare_y_ions": y_type, "possible_y_ions_HexNAc": total_y_hex,
-            "total_y_ions": total_y, "b_ions_with_HexNAc": b_HexNAc_type,
-            "y_ions_with_HexNAc": y_HexNAc_type,
-            "b_ion_coverage": all_b_ions, "y_ion_coverage": all_y_ions, "Stub_ions": stub_type,
-            "scan_id": scan_id,
-            "scan_id_range": []
+            
+            "total_b_ions": total_b,
+            "possible_b_ions_HexNAc": total_b_hex,
+            "total_y_ions": total_y,
+            "possible_y_ions_HexNAc": total_y_hex,
+
+            "Oxonium_ions": merge_observed_matches(oxoniums),
+            "bare_b_ions": merge_observed_matches(b_type),
+            "bare_y_ions": merge_observed_matches(y_type),
+            "b_ions_with_HexNAc": merge_observed_matches(b_HexNAc_type),
+            "y_ions_with_HexNAc": merge_observed_matches(y_HexNAc_type),
+            "b_ion_coverage": merge_observed_matches(all_b_ions), 
+            "y_ion_coverage": merge_observed_matches(all_y_ions),
+            "Stub_ions": merge_observed_matches(stub_type),
+            
+            "scan_id": scan_id_range[0],
+            "scan_id_range": scan_id_range
         })
+
     return [results, did_match_counter, annotate]
 

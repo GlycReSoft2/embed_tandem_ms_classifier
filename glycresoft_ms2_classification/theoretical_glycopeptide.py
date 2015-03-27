@@ -217,8 +217,11 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
                     logger.info("Committing, %d records made", cntr)
     theoretical_search_space_store.commit()
     theoretical_search_space_store.close()
+
     pool.close()
     pool.join()
+    pool.terminate()
+
     logger.info("Hypothesis building complete")
 
     return output_file

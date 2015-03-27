@@ -423,6 +423,7 @@ def main():
         config_path = args.pop("config")
         if config_path is not None:
             config_loader.load(config_path)
+        logger.debug("Config: %r", config_loader.gather())
         if 'constant_modification_list' in args:
             args['constant_modification_list'] = uri_decode_list(
                 args['constant_modification_list'])

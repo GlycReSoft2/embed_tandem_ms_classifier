@@ -79,7 +79,7 @@ def stream_steps(*data):
 
 
 class CountExclusion(object):
-    def __init__(self, predictions, decoys, decoy_ratio=20, filter_terms=None):
+    def __init__(self, predictions, decoys, decoy_ratio=1.0, filter_terms=None):
         if filter_terms is None:
             filter_terms = list(filter_terms_type_map.values())
         self.predictions = predictions
@@ -137,7 +137,7 @@ class CountExclusion(object):
 
 
 class GridSearchOptimizer(object):
-    def __init__(self, predictions, decoys, decoy_ratio=20.0, filter_terms=None, conditions=None):
+    def __init__(self, predictions, decoys, decoy_ratio=1.0, filter_terms=None, conditions=None):
         self.trials = {}
         if filter_terms is None:
             filter_terms = list(filter_terms_type_map.values())

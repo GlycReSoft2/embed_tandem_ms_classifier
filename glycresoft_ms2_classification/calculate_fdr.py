@@ -45,7 +45,7 @@ def calculate_fdr(scored_matches_frame, decoy_matches_frame, predicate_fn=lambda
 
 def generate_decoy_match_results(scored_matches_path, decon_data, model_file_path,
                                  prefix_len=0, suffix_len=0, ms1_tolerance=1e-5,
-                                 ms2_tolerance=2e-5, num_decoys_per_real_mass=20.0,
+                                 ms2_tolerance=2e-5, num_decoys_per_real_mass=1.0,
                                  method="full_random_forest", random_only=False,
                                  method_init_args=None, method_fit_args=None,
                                  n_processes=6, outfile_path=None):
@@ -57,7 +57,8 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
     logger.info("Decoy Ion Space: %s", decoy_file_name)
     match_ions2.match_frags(
         decoy_file_name, decon_data,
-        ms1_tolerance, ms2_tolerance, n_processes=n_processes)
+        ms1_tolerance, ms2_tolerance,
+        n_processes=n_processes)
     logger.info("Decoy Matches Done")
     postprocess_file, postprocess_data = postprocess2.main(decoy_file_name)
     logger.info("Decoys Postprocessed: %s", postprocess_file)
@@ -70,7 +71,7 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
 
 
 def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_matches_path=None,
-         outfile_path=None, num_decoys_per_real_mass=20.0, random_only=False,
+         outfile_path=None, num_decoys_per_real_mass=1.0, random_only=False,
          predicate_fns=None, prefix_len=0, suffix_len=0, by_mod_sig=False,
          ms1_tolerance=None, ms2_tolerance=None, method="full_random_forest", method_init_args=None,
          method_fit_args=None, n_processes=6):
