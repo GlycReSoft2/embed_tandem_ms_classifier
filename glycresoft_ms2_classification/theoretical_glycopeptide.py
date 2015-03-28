@@ -4,7 +4,6 @@ import re
 import datetime
 import multiprocessing
 import logging
-logger = logging.getLogger("theoretical_search_space_builder")
 
 import functools
 import itertools
@@ -19,6 +18,7 @@ from structure import constants
 
 from proteomics import get_enzyme
 
+logger = logging.getLogger("theoretical_search_space_builder")
 mod_pattern = re.compile(r'(\d+)(\w+)')
 
 
@@ -33,6 +33,7 @@ def get_peptide_modifications(data, modification_table):
     return mod_list
 
 
+g_colon_prefix = "G:"
 def get_search_space(row, glycan_identities, glycan_sites, seq_str, mod_list):
     glycan_compo = {}
     for g in glycan_identities:
@@ -45,7 +46,6 @@ def get_search_space(row, glycan_identities, glycan_sites, seq_str, mod_list):
     seq_space = SequenceSpace(
         seq_str, glycan_compo, glycan_sites, mod_list)
     return seq_space
-g_colon_prefix = "G:"
 
 
 def get_glycan_identities(colnames):

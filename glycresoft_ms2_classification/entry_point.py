@@ -100,35 +100,28 @@ def prepare_model_file(postprocessed_ions_file, method="full_random_forest", out
 def classify_data_by_model(
     postprocessed_ions_file, model_file_path, method="full_random_forest", out=None, method_init_args=None,
         method_fit_args=None):
-    #try:
     task = ClassifyTargetWithModelTask(
         model_file_path, postprocessed_ions_file, method=method, output_path=out,
         method_init_args=method_init_args, method_fit_args=method_fit_args)
     result = task.run()
     return result
-    #except Exception, e:
-    #    raise ClassificationException(str(e))
 
 
 def calculate_false_discovery_rate(scored_predictions_file, deconvoluted_spectra=None, model_file_path=None,
                                    decoy_matches_path=None,
                                    method="full_random_forest", ms1_match_tolerance=1e-5, ms2_match_tolerance=2e-5,
-                                   out=None,  n_decoys=20, predicates=None, random_only=False,
+                                   out=None,  n_decoys=1, predicates=None, random_only=False,
                                    n_processes=6, prefix_len=0, suffix_len=1):
-    try:
-        predicates = predicates if predicates is not None else calculate_fdr.default_predicates()
-        outfile_path = calculate_fdr.main(scored_matches_path=scored_predictions_file, decon_data=deconvoluted_spectra,
-                                          model_file_path=model_file_path, decoy_matches_path=decoy_matches_path,
-                                          outfile_path=out, num_decoys_per_real_mass=n_decoys,
-                                          predicate_fns=predicates, prefix_len=prefix_len, suffix_len=suffix_len,
-                                          by_mod_sig=False, random_only=random_only,
-                                          ms1_tolerance=ms1_match_tolerance, ms2_tolerance=ms2_match_tolerance,
-                                          method=method, method_init_args=None,
-                                          method_fit_args=None, n_processes=n_processes)
-        return outfile_path
-    except Exception, e:
-        print(e)
-        raise
+    predicates = predicates if predicates is not None else calculate_fdr.default_predicates()
+    outfile_path = calculate_fdr.main(scored_matches_path=scored_predictions_file, decon_data=deconvoluted_spectra,
+                                      model_file_path=model_file_path, decoy_matches_path=decoy_matches_path,
+                                      outfile_path=out, num_decoys_per_real_mass=n_decoys,
+                                      predicate_fns=predicates, prefix_len=prefix_len, suffix_len=suffix_len,
+                                      by_mod_sig=False, random_only=random_only,
+                                      ms1_tolerance=ms1_match_tolerance, ms2_tolerance=ms2_match_tolerance,
+                                      method=method, method_init_args=None,
+                                      method_fit_args=None, n_processes=n_processes)
+    return outfile_path
 
 
 def build_model_app_function(
@@ -166,7 +159,7 @@ def classify_with_model_app_function(
     constant_modification_list=None, prefix_length=0, suffix_length=1,
     variable_modification_list=None, enzyme=None,
     method="full_random_forest", model_file=None,
-    n_processes=4, random_only=False, decoy_to_real_ratio=20,
+    n_processes=4, random_only=False, decoy_to_real_ratio=1,
     out=None, search_space_db_path=None):
     if search_space_db_path is None:
         theoretical_ion_space_file = generate_theoretical_ion_space(
@@ -218,7 +211,7 @@ def model_diagnostics_app_function(model_file, method="full_random_forest", **kw
 
 def calculate_fdr_app_function(predictions_file, model_file=None, decoys_file=None,
                                deconvoluted_spectra_file=None, prefix_length=0, suffix_length=0,
-                               decoy_to_real_ratio=20, method="full_random_forest",
+                               decoy_to_real_ratio=1, method="full_random_forest",
                                predicate_fns=None, random_only=False,
                                out=None, n_processes=6):
     if (decoys_file is None and deconvoluted_spectra_file is None) or\
@@ -351,7 +344,7 @@ def main():
     classify_with_model_app.add_argument("--out", action="store", default=None)
     classify_with_model_app.set_defaults(func=classify_with_model_app_function)
 
-    classify_with_model_app.add_argument("--decoy-to-real-ratio", action="store", default=20, type=int, help="Number of\
+    classify_with_model_app.add_argument("--decoy-to-real-ratio", action="store", default=1, type=int, help="Number of\
         decoys per prediction sequence")
     classify_with_model_app.add_argument("--random-only", action="store_true", default=False, help="Don't\
         generate shuffled decoys, only randomized sequences")
@@ -400,7 +393,7 @@ def main():
         help="Select the model method to use for classification")
     calculate_fdr_app.add_argument(
         "--decoys-file", default=None, help="A file containing precomputed decoy sequence matches")
-    calculate_fdr_app.add_argument("--decoy-to-real-ratio", action="store", default=20, type=int, help="Number of\
+    calculate_fdr_app.add_argument("--decoy-to-real-ratio", action="store", default=1, type=int, help="Number of\
         decoys per prediction sequence")
     calculate_fdr_app.add_argument("--random-only", action="store_true", default=False, help="Don't\
         generate shuffled decoys, only randomized sequences")
@@ -423,7 +416,7 @@ def main():
         config_path = args.pop("config")
         if config_path is not None:
             config_loader.load(config_path)
-        logger.debug("Config: %r", config_loader.gather())
+        logger.debug("Config: %r", json.dumps(config_loader.gather(), indent=4))
         if 'constant_modification_list' in args:
             args['constant_modification_list'] = uri_decode_list(
                 args['constant_modification_list'])
