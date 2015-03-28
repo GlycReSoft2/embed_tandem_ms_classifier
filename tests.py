@@ -54,8 +54,8 @@ class IonMatchingPipeline(unittest.TestCase):
     methods = classify_matches.ModelTask.method_table.keys()
     ms1_match_tolerance = 1E-05
     ms2_match_tolerance = 2E-05
-    num_procs = 6
-    num_decoys = 20
+    num_procs = 5
+    num_decoys = 1
 
     postprocessed_ions_file = "test_data/USSR/Resultsof20131219_005.processed.json"
     model_file_path = "test_data/USSR/Resultsof20131219_005.model.json"
