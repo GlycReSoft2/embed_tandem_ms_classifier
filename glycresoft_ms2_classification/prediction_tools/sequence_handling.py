@@ -133,6 +133,19 @@ def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
                           glycopeptide_match['y_ions_with_HexNAc'] + glycopeptide_match['b_ion_coverage'] +
                           glycopeptide_match['y_ion_coverage']}
 
+    result = pd.Series({
+        "meanCoverage": mean_coverage,
+        "percentUncovered": percent_uncovered,
+        "percentExpectedObserved": percent_expected_observed,
+        "meanHexNAcCoverage": mean_hexnac_coverage,
+        "peptideCoverageMap": list(total_coverage),
+        "hexNAcCoverageMap": list(hexnac_coverage),
+        "bIonCoverage": b_ion_coverage,
+        "bIonCoverageWithHexNAc": b_ions_with_HexNAc,
+        "yIonCoverage": y_ion_coverage[::-1],
+        "yIonCoverageWithHexNAc":  y_ions_with_HexNAc[::-1],
+    })
+
     if include_golden_pairs:
         # Find each pair of fragments that would result from a single fragmentation
         golden_pairs_observed = 0
@@ -167,28 +180,10 @@ def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
             if "observed_golden_pairs" in frag:
                 frag['observed_golden_pairs'] = list(frag['observed_golden_pairs'])
 
-        golden_pairs_results = {
-            "golden_pairs_observed": golden_pairs_observed,
-            "golden_pairs_hexnac_observed": golden_pairs_hexnac_observed,
-            "golden_pairs_expected": golden_pairs_expected,
-            "golden_pairs_hexnac_expected": golden_pairs_hexnac_expected,
-        }
-
-    result = pd.Series({
-        "meanCoverage": mean_coverage,
-        "percentUncovered": percent_uncovered,
-        "percentExpectedObserved": percent_expected_observed,
-        "meanHexNAcCoverage": mean_hexnac_coverage,
-        "peptideCoverageMap": list(total_coverage),
-        "hexNAcCoverageMap": list(hexnac_coverage),
-        "bIonCoverage": b_ion_coverage,
-        "bIonCoverageWithHexNAc": b_ions_with_HexNAc,
-        "yIonCoverage": y_ion_coverage[::-1],
-        "yIonCoverageWithHexNAc":  y_ions_with_HexNAc[::-1],
-    })
-
-    if include_golden_pairs:
-        result.update(golden_pairs_results)
+        result["golden_pairs_observed"] = golden_pairs_observed
+        result["golden_pairs_hexnac_observed"] = golden_pairs_hexnac_observed
+        result["golden_pairs_expected"] = golden_pairs_expected
+        result["golden_pairs_hexnac_expected"] = golden_pairs_hexnac_expected
 
     return result
 
