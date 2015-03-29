@@ -8,6 +8,8 @@ import sqlitedict
 import pandas as pd
 import numpy as np
 
+import logging
+
 from .sequence_handling import get_sequence_length, compute_ion_coverage_map
 from .sequence_handling import modification_signature
 from .sequence_handling import find_occupied_glycosylation_sites
@@ -16,6 +18,9 @@ from .constants import constants
 
 from ..structure import sequence
 from ..structure import modification
+
+
+logger = logging.getLogger(__name__)
 
 # Defines the list of fields that must be JSON encoded and decoded
 # for storage in CSV files. Because regular scientists cannot possibly
@@ -98,6 +103,7 @@ def shim_percent_calcs(data):
 # CSV into a pandas.DataFrame and make sure it has all of the necessary columns and
 # transformations to either build a model with it or
 def prepare_model_file(path, recompute=False):
+    logger.info("Preparing path '%s'", path)
     if path[-4:] == "json":
         return PredictionResults.deserialize(path, recompute=recompute)
     data = pd.read_csv(path)
