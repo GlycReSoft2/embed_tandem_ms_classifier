@@ -1,5 +1,4 @@
 import logging
-decoy_logger = logging.getLogger("make_decoys")
 import argparse
 import multiprocessing
 import functools
@@ -15,6 +14,8 @@ from glycresoft_ms2_classification.structure import modification, sequence, stub
 from glycresoft_ms2_classification.structure.glycans import from_predictions as glycans_from_predictions
 from glycresoft_ms2_classification import prediction_tools
 from .random_glycopeptide import RandomGlycopeptideBuilder, forge_prediction_record
+
+decoy_logger = logging.getLogger("make_decoys")
 
 Sequence = sequence.Sequence
 sequence_tokenizer_respect_sequons = sequence.sequence_tokenizer_respect_sequons
@@ -116,14 +117,14 @@ def build_shuffle_sequences(ix_prediction, count=20, prefix_len=0, suffix_len=0,
         body = clone[prefix_len:(-suffix_len)]
         n_unique = n_unique_elements(body)
         min_diff = n_unique/3.0
+        body = body[::-1]
+        prev = str(list_to_sequence(pref + list(body) + suf))
+        solutions.add(prev)
         while(len(solutions) - 1 < count and iter_count < iter_max):
             # Permutations are very similar to the original sequence so first
             # transforming the sequence by shuffling it at random or reversing
             # it produce more heterogenous decoys
             # random.shuffle(body)
-            body = body[::-1]
-            prev = str(list_to_sequence(pref + list(body) + suf))
-            solutions.add(prev)
             for shuffle in permute_sequence(body):  #itertools.permutations(body):
                 clone = pref + list(shuffle) + suf
                 res = str(list_to_sequence(clone))
@@ -269,7 +270,7 @@ def random_glycopeptide_to_fragments(sequence_record):
 
 
 def taskmain(predictions_path, prefix_len=0, suffix_len=0,
-             count=20, random_only=False, n_processes=5, out=None):
+             count=1, random_only=False, n_processes=5, out=None):
 
     start_time = time.time()
     predictions = prediction_tools.prepare_model_file(predictions_path)
@@ -354,4 +355,4 @@ app.add_argument("-r", "--random-only", action="store_true")
 if __name__ == '__main__':
     import sys
     logging.basicConfig(level="INFO")
-    taskmain(sys.argv[1], 0, 1, 20, 1)
+    taskmain(sys.argv[1], 0, 1, 1, 1)

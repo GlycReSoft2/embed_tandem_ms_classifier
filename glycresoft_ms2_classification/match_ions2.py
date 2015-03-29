@@ -489,7 +489,8 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
         logger.info("Using Cython")
         match_fn = c_match_observed_to_theoretical_sql
     task_fn = functools.partial(match_fn, ms1_tolerance=ms1_tolerance,
-                                ms2_tolerance=ms2_tolerance, observed_ions_conn_string=db.connection_string)
+                                ms2_tolerance=ms2_tolerance,
+                                observed_ions_conn_string=db.connection_string)
     # Index counter for sqlitedict
     cntr = 0
     if n_processes > 1:
@@ -531,13 +532,14 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     # f.close()
 
     if(split_decon_data):
+        logger.info("Splitting observed spectra between matched and unmatched")
         match, no_match = split_decon_data_by_index(data, did_match_counter)
         annotate_ions(match, annotate_accumulator)
         save_split_decon_data(match, no_match,
                               "{root}.{tag}".format(root=splitext(decon_data)[0],
                                                     tag=tag))
 
-    return fragment_match_store.filename  # outfile + '.json', results
+    return fragment_match_store.filename
 
 
 def taskmain():

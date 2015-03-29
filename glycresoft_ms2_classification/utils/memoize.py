@@ -5,7 +5,7 @@ from copy import deepcopy
 from .diskstore import DiskStore
 
 
-def memoize(maxsize=1000):
+def memoize(maxsize=100):
     """Make a memoization decorator. A negative value of `maxsize` means
     no size limit."""
     def deco(f):
@@ -25,7 +25,7 @@ def memoize(maxsize=1000):
     return deco
 
 
-def memocpy(maxsize=1000):
+def memocpy(maxsize=100):
     def deco(f):
         """Memoization decorator. Items of `kwargs` must be hashable."""
         memo = {}
@@ -42,7 +42,7 @@ def memocpy(maxsize=1000):
     return deco
 
 
-def shelve_memoize(maxsize=1000, index_file=None):
+def shelve_memoize(maxsize=100, index_file=None):
     def deco(f):
         index_name = "./{0}.index".format(f.func_name)
         if index_file is not None:
@@ -61,7 +61,7 @@ def shelve_memoize(maxsize=1000, index_file=None):
     return deco
 
 
-def memoize_partial_sequence(maxsize=1000, slice_backs=None, combiner=add):
+def memoize_partial_sequence(maxsize=100, slice_backs=None, combiner=add):
     if slice_backs is None:
         slice_backs = [1]
 

@@ -5,7 +5,7 @@ from glycresoft_ms2_classification import classify_matches
 from glycresoft_ms2_classification import match_ions2
 from glycresoft_ms2_classification import postprocess2
 from glycresoft_ms2_classification.classify_matches import ClassifyTargetWithModelTask
-from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import make_decoys
+from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import make_decoys_from_search_space
 from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import parameter_search_optimizer as optimize_fdr
 
 
@@ -50,10 +50,10 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
                                  method_init_args=None, method_fit_args=None,
                                  n_processes=6, outfile_path=None):
 
-    decoy_file_name = make_decoys.taskmain(scored_matches_path,
-                                           count=int(num_decoys_per_real_mass),
+    predictions = classify_matches.prepare_model_file(scored_matches_path)
+    decoy_file_name = make_decoys_from_search_space.taskmain(predictions.metadata["db_file_name"],
                                            prefix_len=prefix_len, suffix_len=suffix_len,
-                                           n_processes=n_processes, random_only=random_only, out=outfile_path)
+                                           n_processes=n_processes, out=outfile_path)
     logger.info("Decoy Ion Space: %s", decoy_file_name)
     match_ions2.match_frags(
         decoy_file_name, decon_data,

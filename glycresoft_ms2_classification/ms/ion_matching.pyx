@@ -347,6 +347,8 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                     all_b_ions.append(Match(
                         ppm * 1e6,
                         obs_mass + Proton,
+                        real_tandem.intensity,
+                        real_tandem.charge,
                         theo_ion.key.split("+")[0],
                         tandem_ms_ind
                     ))

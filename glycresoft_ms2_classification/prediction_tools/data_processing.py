@@ -139,7 +139,7 @@ def save_model_file(data_struct, path):
     return path + ".csv"
 
 
-def ion_coverage_score(data_struct):
+def ion_coverage_score(data_struct, include_golden_pairs=True):
     coverage_data = data_struct.apply(compute_ion_coverage_map, 1)
     data_struct['meanCoverage'] = coverage_data["meanCoverage"]
     data_struct['percentUncovered'] = coverage_data["percentUncovered"]
@@ -150,10 +150,11 @@ def ion_coverage_score(data_struct):
     data_struct["bIonCoverageWithHexNAcMap"] = coverage_data["bIonCoverageWithHexNAc"]
     data_struct["yIonCoverageMap"] = coverage_data["yIonCoverage"]
     data_struct["yIonCoverageWithHexNAcMap"] = coverage_data["yIonCoverageWithHexNAc"]
-    data_struct["goldenPairsObserved"] = coverage_data["golden_pairs_observed"]
-    data_struct["goldenPairsHexNAcObserved"] = coverage_data["golden_pairs_hexnac_observed"]
-    data_struct["goldenPairsExpected"] = coverage_data["golden_pairs_expected"]
-    data_struct["goldenPairsHexNAcExpected"] = coverage_data["golden_pairs_hexnac_expected"]
+    if include_golden_pairs:
+        data_struct["goldenPairsObserved"] = coverage_data["golden_pairs_observed"]
+        data_struct["goldenPairsHexNAcObserved"] = coverage_data["golden_pairs_hexnac_observed"]
+        data_struct["goldenPairsExpected"] = coverage_data["golden_pairs_expected"]
+        data_struct["goldenPairsHexNAcExpected"] = coverage_data["golden_pairs_hexnac_expected"]
     return data_struct
 
 

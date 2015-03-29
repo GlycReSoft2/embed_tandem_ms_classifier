@@ -190,7 +190,6 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     metadata_store.update(metadata)
     metadata_store.commit()
 
-    #fragment_info = []
     theoretical_search_space_store = SqliteDict(output_file, tablename="theoretical_search_space")
     pool = multiprocessing.Pool(n_processes)
 
@@ -200,15 +199,13 @@ def main(result_file, site_file, constant_modification_list=None, variable_modif
     cntr = 0
     if n_processes > 1:
         logger.debug("Building theoretical sequences concurrently")
-        #fragment_info = list(itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000)))
-        for res in (itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=1000))):
+        for res in (itertools.chain.from_iterable(pool.imap(task_fn, compo_dict, chunksize=500))):
             theoretical_search_space_store[cntr] = res
             cntr += 1
     else:
         logger.debug("Building theoretical sequences sequentially")
         for row in compo_dict:
             res = task_fn(row)
-            #fragment_info.extend(res)
             for item in res:
                 theoretical_search_space_store[cntr] = item
                 cntr += 1

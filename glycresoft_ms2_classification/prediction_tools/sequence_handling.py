@@ -61,34 +61,51 @@ def percent_expected_ions_with_hexnac_observed(row):
 
 # Maps the coverage along the peptide backbone by matching ions
 # of the correct size to the backbone.
-def compute_ion_coverage_map(row):
-    peptide_length = row['peptideLens']
+def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
+    """Compute the per-ion type coverage for the current glycopeptide
+    and integrate complementar ion ladders to compute the mean per residue
+    coverage with and without HexNAc.
+
+    Parameters
+    ----------
+    glycopeptide_match: pandas.Series
+        Observed ion mapping for a single glycopeptide prediction
+    include_golden_pairs: bool
+        Also compute observed golden pair ions
+
+    Returns
+    -------
+    pandas.Series:
+        Coverage statistics and per site coverage maps
+    """
+    peptide_length = glycopeptide_match['peptideLens']
     total_coverage = np.zeros(peptide_length)
 
     b_ion_coverage = np.zeros(peptide_length)
-    for b_ion in row['b_ion_coverage']:
+    for b_ion in glycopeptide_match['b_ion_coverage']:
         ion = np.zeros(peptide_length)
         ion[:int(b_ion['key'].replace("B", '')) - 1] = 1
         b_ion_coverage += ion
 
     y_ion_coverage = np.zeros(peptide_length)
-    for y_ion in row['y_ion_coverage']:
+    for y_ion in glycopeptide_match['y_ion_coverage']:
         ion = np.zeros(peptide_length)
         ion[:int(y_ion['key'].replace("Y", '')) - 1] = 1
         y_ion_coverage += ion
 
     b_ions_with_HexNAc = np.zeros(peptide_length)
-    for b_ion in row['b_ions_with_HexNAc']:
+    for b_ion in glycopeptide_match['b_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
         ion[:int(re.findall(r'B(\d+)\+', b_ion['key'])[0]) - 1] = 1
         b_ions_with_HexNAc += ion
 
     y_ions_with_HexNAc = np.zeros(peptide_length)
-    for y_ion in row['y_ions_with_HexNAc']:
+    for y_ion in glycopeptide_match['y_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
         ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0]) - 1] = 1
         y_ions_with_HexNAc += ion
 
+    # Combine the b and y ion series to compute the total coverage
     total_coverage += b_ion_coverage.astype(
         np.int32) | b_ions_with_HexNAc.astype(np.int32)
     total_coverage += y_ion_coverage[
@@ -109,46 +126,55 @@ def compute_ion_coverage_map(row):
 
     hexnac_coverage = (b_ions_with_HexNAc + y_ions_with_HexNAc[::-1]) / 2.
 
-    mean_hexnac_coverage = percent_expected_ions_with_hexnac_observed(row)
+    mean_hexnac_coverage = percent_expected_ions_with_hexnac_observed(glycopeptide_match)
 
-    fragment_golden_pair_map = golden_pair_map(row.Glycopeptide_identifier)
-    fragments_observed = {f["key"]: f for f in row['b_ions_with_HexNAc'] +
-                          row['y_ions_with_HexNAc'] + row['b_ion_coverage'] + row['y_ion_coverage']}
+    fragment_golden_pair_map = golden_pair_map(glycopeptide_match.Glycopeptide_identifier)
+    fragments_observed = {f["key"]: f for f in glycopeptide_match['b_ions_with_HexNAc'] +
+                          glycopeptide_match['y_ions_with_HexNAc'] + glycopeptide_match['b_ion_coverage'] +
+                          glycopeptide_match['y_ion_coverage']}
 
-    # Find each pair of fragments that would result from a single fragmentation
-    golden_pairs_observed = 0
-    golden_pairs_expected = 0
-    golden_pairs_hexnac_observed = 0
-    golden_pairs_hexnac_expected = 0
-    [frag.pop("observed_golden_pairs", False) for frag in fragments_observed.values()]
+    if include_golden_pairs:
+        # Find each pair of fragments that would result from a single fragmentation
+        golden_pairs_observed = 0
+        golden_pairs_expected = 0
+        golden_pairs_hexnac_observed = 0
+        golden_pairs_hexnac_expected = 0
+        [frag.pop("observed_golden_pairs", False) for frag in fragments_observed.values()]
 
-    for key, frag in fragments_observed.items():
-        golden_pairs = fragment_golden_pair_map[key]
-        frag['golden_pairs'] = golden_pairs
-        if "observed_golden_pairs" not in frag:
-            frag["observed_golden_pairs"] = set()
-        for golden_pair in golden_pairs:
-            if golden_pair in frag["observed_golden_pairs"]:
-                continue
-            if golden_pair in fragments_observed:
-                golden_pairs_observed += 1
-                if "HexNAc" in key or "HexNAc" in golden_pair:
-                    golden_pairs_hexnac_observed += 1
-                frag["observed_golden_pairs"].add(golden_pair)
-                golden_pair_frag = fragments_observed[golden_pair]
-                if "observed_golden_pairs" not in golden_pair_frag:
-                    golden_pair_frag["observed_golden_pairs"] = set()
-                golden_pair_frag["observed_golden_pairs"].add(key)
-            golden_pairs_expected += 1
-            if "HexNAc" in golden_pair or "HexNAc" in key:
-                golden_pairs_hexnac_expected += 1
+        for key, frag in fragments_observed.items():
+            golden_pairs = fragment_golden_pair_map[key]
+            frag['golden_pairs'] = golden_pairs
+            if "observed_golden_pairs" not in frag:
+                frag["observed_golden_pairs"] = set()
+            for golden_pair in golden_pairs:
+                if golden_pair in frag["observed_golden_pairs"]:
+                    continue
+                if golden_pair in fragments_observed:
+                    golden_pairs_observed += 1
+                    if "HexNAc" in key or "HexNAc" in golden_pair:
+                        golden_pairs_hexnac_observed += 1
+                    frag["observed_golden_pairs"].add(golden_pair)
+                    golden_pair_frag = fragments_observed[golden_pair]
+                    if "observed_golden_pairs" not in golden_pair_frag:
+                        golden_pair_frag["observed_golden_pairs"] = set()
+                    golden_pair_frag["observed_golden_pairs"].add(key)
+                golden_pairs_expected += 1
+                if "HexNAc" in golden_pair or "HexNAc" in key:
+                    golden_pairs_hexnac_expected += 1
 
-    # Convert each set into a list
-    for frag in fragments_observed.values():
-        if "observed_golden_pairs" in frag:
-            frag['observed_golden_pairs'] = list(frag['observed_golden_pairs'])
+        # Convert each set into a list
+        for frag in fragments_observed.values():
+            if "observed_golden_pairs" in frag:
+                frag['observed_golden_pairs'] = list(frag['observed_golden_pairs'])
 
-    return pd.Series({
+        golden_pairs_results = {
+            "golden_pairs_observed": golden_pairs_observed,
+            "golden_pairs_hexnac_observed": golden_pairs_hexnac_observed,
+            "golden_pairs_expected": golden_pairs_expected,
+            "golden_pairs_hexnac_expected": golden_pairs_hexnac_expected,
+        }
+
+    result = pd.Series({
         "meanCoverage": mean_coverage,
         "percentUncovered": percent_uncovered,
         "percentExpectedObserved": percent_expected_observed,
@@ -159,11 +185,12 @@ def compute_ion_coverage_map(row):
         "bIonCoverageWithHexNAc": b_ions_with_HexNAc,
         "yIonCoverage": y_ion_coverage[::-1],
         "yIonCoverageWithHexNAc":  y_ions_with_HexNAc[::-1],
-        "golden_pairs_observed": golden_pairs_observed,
-        "golden_pairs_hexnac_observed": golden_pairs_hexnac_observed,
-        "golden_pairs_expected": golden_pairs_expected,
-        "golden_pairs_hexnac_expected": golden_pairs_hexnac_expected,
-        })
+    })
+
+    if include_golden_pairs:
+        result.update(golden_pairs_results)
+
+    return result
 
 
 def build_ion_map(ion_set, ion_type, length):
