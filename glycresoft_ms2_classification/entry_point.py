@@ -322,7 +322,7 @@ def main():
         choices=set(ClassifyTargetWithModelTask.method_table),
         help="Select the model method to use for classification")
     classify_with_model_app.add_argument("--model-file",
-                                         action="store", default=None, required=True)
+                                         action="store", default="naive", required=True)
     classify_with_model_app.add_argument(
         "--ms1-match-tolerance", type=float, action="store",
         default=match_ions2.ms1_tolerance_default,
@@ -364,7 +364,7 @@ def main():
         choices=set(ModelDiagnosticsTask.method_table),
         help="Select the model method to use for classification")
     reclassify_with_model_app.add_argument("--model-file",
-                                           action="store", default=None, required=True)
+                                           action="store", default="naive", required=True)
     reclassify_with_model_app.set_defaults(
         func=reclassify_with_model_app_function)
 
@@ -376,7 +376,7 @@ def main():
         choices=set(ModelDiagnosticsTask.method_table),
         help="Select the model method to use for classification")
     model_diagnostics_app.add_argument("--model-file",
-                                       action="store", default=None, required=True)
+                                       action="store", default="naive", required=True)
     model_diagnostics_app.set_defaults(func=model_diagnostics_app_function)
 
     # Stand alone False Discovery Rate Calculations. Either reuse decoys or create them anew. May also
@@ -404,7 +404,7 @@ def main():
                                    help="Length of peptide suffix to preserve when generating\
                                           random glycopeptides by shuffling.")
     calculate_fdr_app.add_argument("--model-file",
-                                   action="store", default=None, required=False)
+                                   action="store", default="naive", required=False)
     calculate_fdr_app.add_argument("--out", action="store", default=None)
     calculate_fdr_app.set_defaults(func=calculate_fdr_app_function)
 

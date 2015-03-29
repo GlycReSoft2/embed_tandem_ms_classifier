@@ -81,7 +81,7 @@ class ClassifyTargetWithModelTask(ModelTask):
         self.output_path = output_path.rsplit('.processed')[0] + ".scored"
         super(ClassifyTargetWithModelTask, self).__init__(
             method, method_init_args, method_fit_args)
-        if method != "naive" or model_file_path != "naive":
+        if method != "naive" and model_file_path != "naive":
             self.model_path = model_file_path
             self.model_frame = prepare_model_file(model_file_path)
             self.model_formula, self.classifier_fn = ClassifyTargetWithModelTask.method_table[
@@ -133,6 +133,8 @@ class ModelDiagnosticsTask(ModelTask):
         self, model_file_path, method="full_random_forest",
             output_path=None,
             method_init_args=None, method_fit_args=None):
+        if model_file_path == "naive":
+            raise Exception("Cannot run diagnostics on the naive method")
         if method_init_args is None:
             method_init_args = dict()
         if method_fit_args is None:
