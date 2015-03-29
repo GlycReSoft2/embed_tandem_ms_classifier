@@ -81,7 +81,7 @@ class ClassifyTargetWithModelTask(ModelTask):
         self.output_path = output_path.rsplit('.processed')[0] + ".scored"
         super(ClassifyTargetWithModelTask, self).__init__(
             method, method_init_args, method_fit_args)
-        if method != "naive":
+        if method != "naive" or model_file_path != "naive":
             self.model_path = model_file_path
             self.model_frame = prepare_model_file(model_file_path)
             self.model_formula, self.classifier_fn = ClassifyTargetWithModelTask.method_table[
