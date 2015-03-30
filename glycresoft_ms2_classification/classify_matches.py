@@ -115,7 +115,7 @@ class ClassifyTargetWithModelTask(ModelTask):
 
     def run(self, save=True):
         self.logger.info("Run starting")
-        if self.method != "naive":
+        if self.method != "naive" and self.model_file_path != "naive":
             self.build_model()
         self.classify_with_model()
         if save:
