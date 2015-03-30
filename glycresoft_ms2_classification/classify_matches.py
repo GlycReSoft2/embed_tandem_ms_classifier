@@ -99,7 +99,7 @@ class ClassifyTargetWithModelTask(ModelTask):
 
     def classify_with_model(self):
         scores = None
-        if self.method != "naive":
+        if self.method != "naive" and self.model_path != "naive":
             scores = classify_with_model(
                 self.classifier, self.target_frame, self.model_formula)
         else:
