@@ -14,7 +14,7 @@ from ..structure.composition import composition_to_mass
 from ..structure.sequence import Sequence
 from ..structure.stub_glycopeptides import StubGlycopeptide
 
-PROTON = composition_to_mass("p")
+PROTON = composition_to_mass("H+")
 db_logger = logging.getLogger(__name__)
 
 

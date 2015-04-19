@@ -84,13 +84,13 @@ def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
     b_ion_coverage = np.zeros(peptide_length)
     for b_ion in glycopeptide_match['b_ion_coverage']:
         ion = np.zeros(peptide_length)
-        ion[:int(b_ion['key'].replace("B", '')) - 1] = 1
+        ion[:int(re.findall(r'B(\d+)?:', b_ion['key'])[0]) - 1] = 1
         b_ion_coverage += ion
 
     y_ion_coverage = np.zeros(peptide_length)
     for y_ion in glycopeptide_match['y_ion_coverage']:
         ion = np.zeros(peptide_length)
-        ion[:int(y_ion['key'].replace("Y", '')) - 1] = 1
+        ion[:int(re.findall(r'Y(\d+)?:', y_ion['key'])[0]) - 1] = 1
         y_ion_coverage += ion
 
     b_ions_with_HexNAc = np.zeros(peptide_length)
@@ -155,6 +155,7 @@ def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
         [frag.pop("observed_golden_pairs", False) for frag in fragments_observed.values()]
 
         for key, frag in fragments_observed.items():
+            key = key.split(":")[0]
             golden_pairs = fragment_golden_pair_map[key]
             frag['golden_pairs'] = golden_pairs
             if "observed_golden_pairs" not in frag:

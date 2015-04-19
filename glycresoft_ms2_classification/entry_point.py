@@ -1,5 +1,15 @@
 import os
+# import atexit
+import json
 import logging
+try:
+    import urllib2 as url_parser  # python 2
+except ImportError:
+    import urllib.parse as url_parser  # python 3
+import multiprocessing
+from error_code_interface import (NoSitesFoundWrapperException, ImportErrorWrapperException,
+                                  UnqualifiedModificationWrapperException, NoIonsMatchedException,
+                                  ModelFitException)
 try:
     logfile = "./.glycresoft-log"
     open(logfile, 'w').close()
@@ -7,21 +17,14 @@ except Exception, e:
     print(e)
     logfile = os.path.expanduser("~/.glycresoft-log")
     print("logging to ~/")
-logging.basicConfig(level=logging.DEBUG, filename=logfile, filemode='w' , format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+logging.basicConfig(level=logging.DEBUG, filename=logfile, filemode='w',
+                    format="%(asctime)s - %(name)s:%(funcName)s:%(lineno)d - %(levelname)s - %(message)s",
+                    datefmt="%H:%M:%S")
 logger = logging.getLogger()
 
-import atexit
-import json
 
 # Handles URI Decoding incompatibility with py2K
-try:
-    import urllib2 as url_parser  # python 2
-except ImportError:
-    import urllib.parse as url_parser  # python 3
-
-import multiprocessing
-
-from error_code_interface import *
 # Import the pipeline modules, wrapping any ImportErrors in the cross-runtime communication
 # exception.
 try:
@@ -30,7 +33,6 @@ try:
     from glycresoft_ms2_classification.structure.sequence_space import UnqualifiedModifierException
     from glycresoft_ms2_classification.structure.sequence_space import NoSitesFoundException
     from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
-
     from glycresoft_ms2_classification import theoretical_glycopeptide
     from glycresoft_ms2_classification import match_ions2
     from glycresoft_ms2_classification import postprocess2

@@ -29,7 +29,6 @@ class StubGlycopeptide:
         self.pep_seq = sequence
         self.mass = sequence_obj.mass
         self.glyco_num = int(sites_num)
-        #self.mod = modification
         self.glycan_compo = glycan_comp
         if glycan_comp == '':
             self.dHex = ''
@@ -43,35 +42,7 @@ class StubGlycopeptide:
             self.HexNAc = int(self.glycans[2])
             self.NeuAc = int(self.glycans[3])
 
-        # if modification == '' or modification is None:
-        #     self.n_mod = ''
-        #     self.mod_type = ''
-        # else:
-        #     match_pattern = re.compile(r'(\d+)(\w+)')
-        #     mods = match_pattern.findall(self.mod)
-        #     self.n_mod = int(mods[0][0])
-        #     self.mod_type = mods[0][1]
-
-        while True:
-            self.begin, self.end = self.pep_seq.find(
-                '('), self.pep_seq.find(')')
-            if self.begin != -1 and self.end != -1:
-                # add this to capture the carbamidomethyls--> + " " +
-                # peptide[begin+1:end]
-                self.pep_seq = self.pep_seq[
-                    :self.begin] + self.pep_seq[self.end + 1:]
-            else:
-                break
-
         self.length = len(self.pep_seq)
-
-        # The following part was to add oxonium ions based on presence of sialylation.
-        # now we'll instead check if a high mannose composition has 274 or 292 and reduce score:
-        # if self.NeuAc == 0:
-        #     self.Oxo_ions = [204.0864,186.0754,163.0601,168.0650,138.0542,366.1394]
-
-        # elif self.NeuAc > 0:
-        #     self.Oxo_ions = [204.0864,186.0754,163.0601,168.0650,138.0542,366.1394,274.0920,292.1026]
 
     @classmethod
     def from_sequence(cls, sequence_obj):
@@ -82,17 +53,6 @@ class StubGlycopeptide:
 
     def get_stubs(self):
         """returns a list of dicts with peptide and stub glycopeptide ions """
-        # for i in self.pep_seq:
-        #     res = Residue()
-        #     res.by_symbol(i)
-        #     if i == 'C':
-        #         self.mass += Carbamidomethyl
-        #     self.mass += res.mass
-
-        # if self.mod_type == "Deamidated":
-        #     self.mass += (Deamidation * self.n_mod)
-        # elif self.mod_type == '':
-        #     pass
         stubs = []
 
         stubs.append({"key": "peptide", "mass":  (self.mass + Proton)})

@@ -1,6 +1,5 @@
 import sys
 from setuptools import setup, find_packages, Extension
-from Cython.Build import cythonize
 
 # With gratitude to the SqlAlchemy setup.py authors
 
@@ -14,12 +13,23 @@ if sys.platform == 'win32':
     # find the compiler
     ext_errors += (IOError,)
 
-extensions = cythonize([Extension("glycresoft_ms2_classification.utils.cmass_heap",
-                        ["glycresoft_ms2_classification/utils/cmass_heap.pyx"]),
-                        Extension("glycresoft_ms2_classification.ms.ion_matching",
-                                  ["glycresoft_ms2_classification/ms/ion_matching.pyx"])],
-                        annotate=True,
-                        profile=True)
+c_ext = "pyx"
+try:
+    from Cython.Build import cythonize
+except:
+    c_ext = "c"
+
+extensions = [
+    Extension("glycresoft_ms2_classification.utils.cmass_heap",
+              ["glycresoft_ms2_classification/utils/cmass_heap." + c_ext]),
+    Extension("glycresoft_ms2_classification.ms.ion_matching",
+              ["glycresoft_ms2_classification/ms/ion_matching." + c_ext]),
+    Extension("glycresoft_ms2_classification.structure.composition.ccomposition",
+              ["glycresoft_ms2_classification/structure/composition/ccomposition." + c_ext])
+]
+
+if c_ext == "pyx":
+    extensions = cythonize(extensions, annotate=True)
 
 cmdclass = {}
 
@@ -28,6 +38,9 @@ class BuildFailed(Exception):
 
     def __init__(self):
         self.cause = sys.exc_info()[1]  # work around py 2/3 different syntax
+
+    def __str__(self):
+        return str(self.cause)
 
 
 class ve_build_ext(build_ext):
@@ -95,9 +108,9 @@ def run_setup(include_cext=True):
 
 try:
     run_setup(True)
-except BuildFailed as exc:
+except Exception as exc:
     status_msgs(
-        exc.cause,
+        str(exc),
         "WARNING: The C extension could not be compiled, " +
         "speedups are not enabled.",
         "Failure information, if any, is above.",

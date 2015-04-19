@@ -10,23 +10,15 @@ from ..utils import collectiontools
 Sequence = sequence.Sequence
 
 
-class Proteome(object):
+class Proteome(dict):
     def __init__(self, proteins_dict=None):
         if proteins_dict is None:
             proteins_dict = dict()
-        self.proteins = proteins_dict
-
-    def __getitem__(self, key):
-        return self.proteins[key]
-
-    def __setitem__(self, key, value):
-        self.proteins[key] = value
-
-    def __delitem__(self, key):
-        self.proteins.__delitem__(key)
+        dict.__init__(self, **proteins_dict)
+        self.index = None
 
     def __iter__(self):
-        for protein in self.proteins.values():
+        for protein in self.values():
             yield protein
 
     def compress(self):
@@ -34,14 +26,15 @@ class Proteome(object):
             protein.compress()
 
     def peptide_index(self):
-        return index_shared_peptides(self)
+        self.index = index_shared_peptides(self)
+        return self.index
 
     def peptides(self, no_dups=True, protein_filter=lambda x: True, peptide_filter=lambda x: True):
         if no_dups:
             track = set()
             for peptide in self.peptides(no_dups=False, protein_filter=protein_filter, peptide_filter=peptide_filter):
                 k = hash(peptide)
-                if not k in track:
+                if k not in track:
                     track.add(k)
                     yield peptide
         else:
@@ -67,10 +60,8 @@ class ReferenceProtein(object):
     def __repr__(self):
         rep = '''>{accession} with {num_peptides} peptides
 {sequence}
-{metadata}
 '''.format(accession=self.accession, sequence=self.sequence,
-           num_peptides=len(self.peptides), metadata=json.dumps(self.metadata,
-                                                                indent=2, sort_keys=True))
+           num_peptides=len(self.peptides))
         return rep
 
     def __getitem__(self, indices):
@@ -101,12 +92,28 @@ class ReferenceProtein(object):
     def compress(self):
         self.peptides = list(self)
 
+    @property
+    def n_glycan_sequon_sites(self):
+        return sequence.find_n_glycosylation_sequons(self.sequence) +\
+               self.metadata.get("n_glycan_sequon_sites", [])
+
+    def describe(self):
+        rep = '''>{accession} with {num_peptides} peptides
+{sequence}
+{metadata}
+'''.format(accession=self.accession, sequence=self.sequence,
+           num_peptides=len(self.peptides), metadata=json.dumps(self.metadata,
+                                                                indent=2, sort_keys=True))
+        return rep
+
 
 def index_shared_peptides(reference_protein_list):
     index = defaultdict(list)
     for reference_protein in reference_protein_list:
-        for peptide_match in [p for p in reference_protein]:
-            index[peptide_match].append((reference_protein.accession, peptide_match.peptide_score))
+        for peptide_match in reference_protein:
+            index[peptide_match].append(
+                (reference_protein.accession, peptide_match)
+                )
     return index
 
 
@@ -114,6 +121,7 @@ PROTEOMICS_SCORE = ["PEAKS:peptideScore", "mascot:score", "PEAKS:proteinScore"]
 
 
 class PeptideMatch(Sequence):
+
     def __init__(self, sequence, protein_id, start, end, is_decoy, **metadata):
         super(PeptideMatch, self).__init__(sequence)
         self.protein_id = protein_id
@@ -121,6 +129,16 @@ class PeptideMatch(Sequence):
         self.end = end
         self.is_decoy = is_decoy
         self.metadata = metadata
+        self.parent = None
+        self._base_sequence = sequence
+
+    @property
+    def n_glycan_sequon_sites(self):
+        if self.parent is not None:
+            return tuple(site - self.start for site in self.parent.n_glycan_sequon_sites
+                         if self.start <= site < self.end and len(self.seq[site - self.start][1]) == 0)
+        else:
+            return sequence.find_n_glycosylation_sequons(self)
 
     def __hash__(self):
         return hash(str(self))

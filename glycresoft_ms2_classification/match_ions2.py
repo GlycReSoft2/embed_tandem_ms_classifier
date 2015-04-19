@@ -82,6 +82,25 @@ decon_format_lookup = {
 }
 
 
+def dispatcher(index_range, theoretical_space_path, worker_fn):
+    range_start, range_stop = index_range
+    theoretical_search_space = sqlitedict.SqliteDict(theoretical_space_path, tablename="theoretical_search_space")
+    did_match_counter = Counter()
+    annotate_accumulator = defaultdict(list)
+    fragment_match_store = sqlitedict.SqliteDict(theoretical_space_path, tablename="matched_ions", journal_mode="OFF")
+    for i in xrange(range_start, range_stop):
+        theoretical = theoretical_search_space.get(i, None)
+        if theoretical is None:
+            continue
+        matches, counter, annotater = worker_fn(theoretical)
+        for m in matches:
+            fragment_match_store[i] = m
+            i += 1
+        did_match_counter += counter
+        combine_annotations(annotate_accumulator, annotater)
+    return did_match_counter, annotate_accumulator
+
+
 def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms1_tolerance, ms2_tolerance):
     db = MSMSSqlDB(observed_ions_conn_string)
     theoretical_sequence = theoretical["Seq_with_mod"] + theoretical["Glycan"]
@@ -494,7 +513,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     # Index counter for sqlitedict
     cntr = 0
     if n_processes > 1:
-        logger.debug("Matching concurrently")
+        # logger.debug("Matching concurrently")
         matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
                                                chunksize=750)
         for matches, counter, annotater in matching_process:
@@ -520,16 +539,6 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
         raise NoIonsMatchedException("No matches found from theoretical ions in MS2 deconvoluted results")
 
     fragment_match_store.commit()
-    # save_unmerged = multiprocessing.Process(target=save_interm, args=(results, "unmerged-matches"))
-    # save_unmerged.start()
-
-    # results = {
-    #     "metadata": metadata,
-    #     "matched_ions": merged_results
-    # }
-    # f = open(outfile + '.json', 'wb')
-    # json.dump(results, f)
-    # f.close()
 
     if(split_decon_data):
         logger.info("Splitting observed spectra between matched and unmatched")

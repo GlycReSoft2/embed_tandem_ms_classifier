@@ -51,9 +51,10 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
                                  n_processes=6, outfile_path=None):
 
     predictions = classify_matches.prepare_model_file(scored_matches_path)
-    decoy_file_name = make_decoys_from_search_space.taskmain(predictions.metadata["db_file_name"],
-                                           prefix_len=prefix_len, suffix_len=suffix_len,
-                                           n_processes=n_processes, out=outfile_path)
+    decoy_file_name = make_decoys_from_search_space.taskmain(
+        predictions.metadata["db_file_name"],
+        prefix_len=prefix_len, suffix_len=suffix_len,
+        n_processes=n_processes, out=outfile_path)
     logger.info("Decoy Ion Space: %s", decoy_file_name)
     match_ions2.match_frags(
         decoy_file_name, decon_data,

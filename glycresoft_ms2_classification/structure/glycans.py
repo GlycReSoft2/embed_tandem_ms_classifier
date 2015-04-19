@@ -3,7 +3,7 @@ import os
 import re
 
 from collections import OrderedDict
-
+from .composition import Composition
 from .modification import AnonymousModificationRule
 
 mammalian_glycomedb_nlinked_path = os.path.join(os.path.dirname(__file__), "data", "Mammalian_GlycomeDB_NLinked.csv")
@@ -36,12 +36,6 @@ class Glycan(object):
         self.glycan_identities = glycan_identities
         self.data = kwargs
 
-        self.composition_dict = OrderedDict()
-        if glycan_identities is not None:
-            iter_identities = iter(glycan_identities)
-            for count in composition:
-                self.composition_dict[iter_identities.next()] = count
-
     @property
     def molecular_weight(self):
         return self.mass
@@ -62,6 +56,22 @@ class Glycan(object):
     def __ne__(self, other):
         comp_eq = any(i != j for i, j in zip(self.composition, other.composition))
         return comp_eq
+
+    @property
+    def composition_dict(self):
+        composition_dict = OrderedDict()
+        iter_identities = iter(self.glycan_identities)
+        for count in self.composition:
+            composition_dict[iter_identities.next()] = count
+        return composition_dict
+
+    def dehydrate(self):
+        if "Water" in self.glycan_identities:
+            i = self.glycan_identities.index("Water")
+            if self.composition[i] > 0:
+                self.composition[i] -= 1
+                self.mass -= Composition("H2O").mass
+
 
 
 class GlycanHypothesis(list):

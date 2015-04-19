@@ -1,14 +1,19 @@
+import re
+import logging
 from pyteomics import mzid
-
 
 from ..structure import sequence
 from ..structure import modification
+from ..structure import residue
 
 from .proteome_components import ReferenceProtein, PeptideMatch, Proteome
+
+logger = logging.getLogger("mzid")
 
 Sequence = sequence.Sequence
 ModificationRule = modification.ModificationRule
 Modification = modification.Modification
+Residue = residue.Residue
 
 
 def extract_proteins(mzid_file):
@@ -27,51 +32,54 @@ def handle_protein_hypothesis(hypothesis_dict):
     protein.peptides = [peptide
                         for match in hypothesis_dict["PeptideHypothesis"]
                         for ident_item in match["SpectrumIdentificationItemRef"]
-                        for peptide in convert_dict_to_sequence(ident_item, protein.accession)
+                        for peptide in convert_dict_to_sequence(ident_item, protein)
                         ]
     return protein
 
 
-def convert_dict_to_sequence(sequence_dict, protein_id=None):
-    peptide_sequence = sequence_dict["PeptideSequence"]
-    n_term = ""
-    c_term = ""
+def convert_dict_to_sequence(sequence_dict, parent_protein):
+    logger.debug("Input: %r, Parent: %r", sequence_dict, parent_protein)
+    base_sequence = sequence_dict["PeptideSequence"]
+    peptide_sequence = Sequence(sequence_dict["PeptideSequence"])
     if "SubstitutionModification" in sequence_dict:
-        sequence_list = list(peptide_sequence)
         subs = sequence_dict["SubstitutionModification"]
         for sub in subs:
             pos = sub['location'] - 1
-            mod_str = "@{originalResidue}->{replacementResidue}".format(**sub)
-            sequence_list[pos] = "{0}({1})".format(sub['replacementResidue'], mod_str)
-        peptide_sequence = "".join(sequence_list)
+            replace = Residue(sub["replacementResidue"])
+            peptide_sequence[pos][0] = replace
 
     if "Modification" in sequence_dict:
         mods = sequence_dict["Modification"]
-        sequence_list = list(peptide_sequence)
         for mod in mods:
-            try:
-                pos = mod["location"] - 1
-                sequence_list[pos] += "({0})".format(mod["name"])
-            except IndexError:
-                if pos == -1:
-                    n_term = "({0})-".format(mod["name"])
-                elif pos == len(sequence_list):
-                    c_term = "-({0})".format(mod["name"])
-                else:
-                    raise
-        peptide_sequence = n_term + "".join(sequence_list) + c_term
+            pos = mod["location"] - 1
+            modification = Modification(mod["name"])
+            if pos == -1:
+                peptide_sequence.n_term = modification
+            elif pos == len(peptide_sequence):
+                peptide_sequence.c_term = modification
+            else:
+                peptide_sequence.add_modification(pos, modification)
     for evidence in sequence_dict["PeptideEvidenceRef"]:
-        #evidence_id = evidence["id"]
         start = evidence["start"] - 1
         end = evidence["end"]
+        found = parent_protein.sequence.find(base_sequence)
+        if found == -1:
+            raise ValueError("Peptide not found in Protein")
+        if found != start:
+            logger.debug(
+                "%r: %d <- %d, %s, %d", evidence["PeptideSequence"], found, start,
+                parent_protein.accession, parent_protein.sequence.count(base_sequence))
+            start = found
+            end = start + len(base_sequence)
         is_decoy = evidence["isDecoy"]
         try:
-            match = PeptideMatch(peptide_sequence, protein_id, start,
+            match = PeptideMatch(str(peptide_sequence), parent_protein.accession, start,
                                  end, is_decoy, **{k: v for k, v in sequence_dict.items() if k not in
                                                    exclude_keys_from_sequence_dict})
+            match.parent = parent_protein
+            logger.debug("Produce: %r", match)
             yield match
         except:
             print(evidence)
             raise
-exclude_keys_from_sequence_dict = set(("PeptideEvidenceRef", "accession", "start", "end",
-                                       "isDecoy", "PeptideSequence", "Modification"))
+exclude_keys_from_sequence_dict = set(("accession", "isDecoy"))

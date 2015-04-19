@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 
 from . import PeptideSequenceBase, MoleculeBase
 from . import constants as structure_constants
-from .composition import Composition, composition_to_mass
+from .composition import Composition, composition_to_mass, std_ion_comp
 from .fragment import Fragment, fragment_pairing, fragment_direction
 from .modification import Modification
 from .residue import Residue
@@ -274,6 +274,12 @@ class Sequence(PeptideSequenceBase):
     def __ne__(self, other):
         return str(self) != str(other)
 
+    def deglycosylate(self):
+        for i, pos in enumerate(self):
+            mods = [mod.name for mod in pos[1] if mod.name == "HexNAc" or "Glycan" in mod.name]
+            for mod in mods:
+                seld.drop_modification(i, mod)
+
     def break_golden_pair(self, frag):
         if isinstance(frag, Fragment):
             kind = frag.type
@@ -301,8 +307,8 @@ class Sequence(PeptideSequenceBase):
         return golden_pair_name
 
     def break_at(self, idx):
-        b_shift = Composition('H').mass - Composition('e').mass
-        y_shift = Composition('H2O').mass + Composition('H').mass - Composition('e').mass
+        b_shift = Composition('H+').mass
+        y_shift = Composition('H2O').mass + Composition('H+').mass
 
         mod_b = defaultdict(int)
         mass_b = 0
@@ -356,11 +362,11 @@ class Sequence(PeptideSequenceBase):
         if kind == 'B' or kind == "b":
             seq_list = self.seq
             # Hydrogen ionized is from terminal modification
-            mass_shift = composition_to_mass('H') - composition_to_mass('e')
+            mass_shift = composition_to_mass('H+')
 
         elif kind == 'Y' or kind == "y":
             # y ions abstract a proton from the precursor
-            mass_shift = composition_to_mass('H2O') + composition_to_mass('H') - composition_to_mass('e')
+            mass_shift = composition_to_mass('H2O') + composition_to_mass('H+')
             seq_list = list(reversed(self.seq))
 
         current_mass = 0
@@ -578,41 +584,3 @@ def sequence_tokens_to_mass(tokens):
         mass += Composition("OH").mass
     return mass
 
-
-class SimplePeptide(object):
-    def __init__(self, sequence_str, mass=None, missed_cleavages=0, cleaver=None, mod_index=None, length=None):
-        self.sequence = str(sequence_str)
-        self.mass = sequence_to_mass(self.sequence) if mass is None else mass
-        if length is None:
-            tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
-            self.length = len(tokens)
-        else:
-            self.length = length
-        self.missed_cleavages = missed_cleavages
-        self.cleaver = cleaver
-        self.mod_index = mod_index if mod_index is not None else {}
-
-    def pad(self):
-        for padded in self.cleaver.pad(self):
-            yield SimplePeptide(padded, missed_cleavages=self.missed_cleavages)
-
-    def __len__(self):
-        return self.length
-
-    def extend(self, other):
-        self.sequence += str(other)
-        self.missed_cleavages += other.missed_cleavages
-        self.mass += other.mass
-        self.mod_index.update(other.mod_index)
-
-    def __str__(self):
-        return self.sequence
-
-    def __repr__(self):
-        return "{0}:{1}".format(self.sequence, (self.mass, self.missed_cleavages))
-
-    def __iter__(self):
-        tokens, mods, glycan, n_term, c_term = sequence_tokenizer(self.sequence)
-        for tok in tokens:
-            yield (Residue(symbol=tok[0]),
-                   tuple(Modification(s) for s in tok[1] if s != ''))

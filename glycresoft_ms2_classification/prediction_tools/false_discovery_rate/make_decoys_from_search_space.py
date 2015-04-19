@@ -15,6 +15,7 @@ list_to_sequence = sequence.list_to_sequence
 
 logger = logging.getLogger()
 
+
 def fragments(seq):
     seq_mod = seq.get_sequence()
     fragments = zip(*map(seq.break_at, range(1, len(seq))))
@@ -73,8 +74,6 @@ def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
     return decoy
 
 
-
-
 def taskmain(predictions_path, n_processes=4, prefix_len=0, suffix_len=0, out=None):
     decoy_path = (predictions_path if out is None else out).rsplit("scored", 1)[0] + "decoy.db"
 
@@ -104,10 +103,10 @@ def taskmain(predictions_path, n_processes=4, prefix_len=0, suffix_len=0, out=No
         worker_pool.terminate()
         worker_pool.close()
     else:
-        for decoy in itertools.imap(task_fn, theoretical_sequence.itervalues()):
+        for decoy in itertools.imap(task_fn, theoretical_sequences.itervalues()):
             decoy_table[cntr] = decoy
             cntr += 1
             if cntr % 10000 == 0:
                 decoy_table.commit()
-    decoy_table.commit() 
-    return decoy_path           
+    decoy_table.commit()
+    return decoy_path

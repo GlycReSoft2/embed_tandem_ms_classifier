@@ -14,6 +14,9 @@ from libc.math cimport fabs
 from glycresoft_ms2_classification.ms import spectra
 
 cdef class TheoreticalIon:
+    '''
+    Represents a single predicted ion
+    '''
     cdef double mass
     cdef str key
 
@@ -64,7 +67,7 @@ cpdef MatchGroup merge_group(list matches):
         double current_ppm
         Match best_match = matches[0]
         Match match
-        int i = 1
+        int i = 0
         double sum_intensity = 0
         dict scan_id_to_ppm = dict()
         MatchGroup merged
@@ -137,7 +140,7 @@ cdef class Match:
         self.obs_ion = obs_ion
         self.intensity = intensity
         self.charge = charge
-        self.key = key
+        self.key = key + ':' + str(charge)
         self.scan_id = scan_id
 
     cpdef dict as_dict(self):
