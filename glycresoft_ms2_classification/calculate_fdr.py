@@ -50,6 +50,7 @@ def generate_decoy_match_results(scored_matches_path, decon_data, model_file_pat
                                  method_init_args=None, method_fit_args=None,
                                  n_processes=6, outfile_path=None):
 
+    logger.info("Creating Decoys")
     predictions = classify_matches.prepare_model_file(scored_matches_path)
     decoy_file_name = make_decoys_from_search_space.taskmain(
         predictions.metadata["db_file_name"],
@@ -98,6 +99,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
     if outfile_path is None:
         outfile_path = scored_matches_path[:-5] + "_fdr.json"
     if decon_data is not None and model_file_path is not None:
+        logger.info("No decoys given.")
         decoy_matches_path = generate_decoy_match_results(
             scored_matches_path, decon_data, model_file_path, prefix_len=prefix_len,
             suffix_len=suffix_len, ms1_tolerance=ms1_tolerance, ms2_tolerance=ms2_tolerance,
@@ -112,6 +114,7 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
         decoy_matches_frame = ClassifyTargetWithModelTask(
             model_file_path, decoy_matches_path, method=method).run(False)
     else:
+        logger.info("Pre-matched Decoys Given")
         scored_matches_frame = classify_matches.prepare_model_file(
             scored_matches_path)
         decoy_matches_frame = classify_matches.prepare_model_file(

@@ -87,9 +87,11 @@ def taskmain(predictions_path, n_processes=4, prefix_len=0, suffix_len=0, out=No
     metadata_table.commit()
     metadata_table.close()
 
+    logger.info("Reading sequence space from %r", predictions_path)
     theoretical_sequences = sqlitedict.open(predictions_path, "theoretical_search_space")
 
     decoy_table = sqlitedict.open(decoy_path, "theoretical_search_space", journal_mode="OFF")
+    logger.info("Writing decoys to %r", decoy_path)
     cntr = 0
     task_fn = functools.partial(make_decoy, prefix_len=prefix_len, suffix_len=suffix_len)
     if n_processes > 1:
@@ -99,6 +101,7 @@ def taskmain(predictions_path, n_processes=4, prefix_len=0, suffix_len=0, out=No
             decoy_table[cntr] = decoy
             cntr += 1
             if cntr % 10000 == 0:
+                logger.info("Processed %d decoys", cntr)
                 decoy_table.commit()
         worker_pool.terminate()
         worker_pool.close()
@@ -107,6 +110,8 @@ def taskmain(predictions_path, n_processes=4, prefix_len=0, suffix_len=0, out=No
             decoy_table[cntr] = decoy
             cntr += 1
             if cntr % 10000 == 0:
+                logger.info("Processed %d decoys", cntr)
                 decoy_table.commit()
     decoy_table.commit()
+    logger.info("Decoy creation complete.")
     return decoy_path

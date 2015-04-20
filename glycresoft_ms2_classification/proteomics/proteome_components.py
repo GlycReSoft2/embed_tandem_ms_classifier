@@ -72,7 +72,7 @@ class ReferenceProtein(object):
 
     def sort_peptides(self):
         '''Group peptides by sequence features and sort them by peptide_score'''
-        groups = collectiontools.groupby(self.peptides, lambda x: (str(x), (x.start, x.end)))
+        groups = collectiontools.groupby(self.peptides, lambda x: (str(x), (x.start, x.end), x.parent.accession))
         map(lambda x: x.sort(key=lambda y: y.peptide_score, reverse=True), groups.values())
         return groups
 

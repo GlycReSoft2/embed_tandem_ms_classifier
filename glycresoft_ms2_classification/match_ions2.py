@@ -78,6 +78,7 @@ def annotate_ions(observed_ions, annotations):
 
 decon_format_lookup = {
     "bupid_yaml": BUPIDYamlParser,
+    "db": MSMSSqlDB,
     "default": default_loader
 }
 
@@ -470,15 +471,21 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     :param outfile: path to the file to write output to. Defaults to theo_fragment_file + ".match_frags".
     '''
 
-    pool = multiprocessing.Pool(n_processes)
+    pool = multiprocessing.Pool(n_processes, maxtasksperchild=10)
 
     # theoretical_search_space = try_deserialize(theo_fragment_file)
     theoretical_search_space = sqlitedict.SqliteDict(
         db_file, tablename="theoretical_search_space")
-    # if outfile is None:
-    #     outfile = try_get_outfile(theoretical_search_space, "match_frags")
-
-    data = ParallelParser(decon_format_lookup[decon_data_format], (decon_data,))
+    if isinstance(decon_data, str):
+        if decon_data_format != "db":
+            data = ParallelParser(decon_format_lookup[decon_data_format], (decon_data,))
+            db = None
+        else:
+            data = None
+            db = MSMSSqlDB(decon_data)
+    elif isinstance(decon_data, MSMSSqlDB):
+        data = None
+        db = decon_data
 
     metadata = sqlitedict.SqliteDict(db_file, tablename="metadata")
     metadata["ms1_ppm_tolerance"] = ms1_tolerance
@@ -498,10 +505,14 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
 
     did_match_counter = Counter()
     annotate_accumulator = defaultdict(list)
-    data = data.await()
-    logger.info("Indexing observed ions")
-    db = data.to_db()
-    logger.info("Index built.")
+
+    if db is None and data is not None:
+        data = data.await()
+        logger.info("Indexing observed ions")
+        db = data.to_db()
+        logger.info("Index built.")
+    elif db is not None:
+        pass
 
     match_fn = match_observed_to_theoretical_sql
     if use_cython:
@@ -535,6 +546,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
 
     pool.close()
     pool.join()
+    del pool
     if(cntr < 1):
         raise NoIonsMatchedException("No matches found from theoretical ions in MS2 deconvoluted results")
 

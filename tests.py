@@ -3,8 +3,27 @@ import unittest
 import warnings
 import csv
 import logging
-logging.basicConfig(level="DEBUG", format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 from ConfigParser import ConfigParser
+logging.basicConfig(level=logging.DEBUG, filemode='w',
+                    format="%(asctime)s - %(name)s:%(funcName)s:%(lineno)d - %(levelname)s - %(message)s",
+                    datefmt="%H:%M:%S")
+logger = logging.getLogger()
+from sqlitedict import SqliteDict
+
+from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
+
+from glycresoft_ms2_classification import theoretical_glycopeptide
+from glycresoft_ms2_classification import calculate_fdr
+from glycresoft_ms2_classification import entry_point
+from glycresoft_ms2_classification import classify_matches
+
+from glycresoft_ms2_classification.structure import sequence
+from glycresoft_ms2_classification.structure import glycans
+from glycresoft_ms2_classification.structure import modification
+
+from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import random_glycopeptide
+from glycresoft_ms2_classification.utils import config_loader
+
 
 config_file = "test.config"
 config =  ConfigParser()
@@ -12,24 +31,6 @@ config.read(config_file)
 
 #multiprocessing_util.log_to_stderr()
 
-from sqlitedict import SqliteDict
-
-from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
-from glycresoft_ms2_classification import theoretical_glycopeptide
-from glycresoft_ms2_classification import calculate_fdr
-from glycresoft_ms2_classification import entry_point
-from glycresoft_ms2_classification import classify_matches
-
-entry_point.logger.addHandler(logging.StreamHandler())
-
-from glycresoft_ms2_classification.structure import sequence
-from glycresoft_ms2_classification.structure import glycans
-from glycresoft_ms2_classification.structure import modification
-from glycresoft_ms2_classification.structure import composition
-
-from glycresoft_ms2_classification.prediction_tools.false_discovery_rate import random_glycopeptide
-
-from glycresoft_ms2_classification.utils import config_loader
 
 config_loader.load("base.config")
 
