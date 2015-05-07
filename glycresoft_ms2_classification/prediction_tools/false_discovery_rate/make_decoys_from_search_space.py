@@ -72,7 +72,6 @@ def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
     body = body[::-1]
     rev_seq = (list_to_sequence(pref + list(body) + suf))
     assert str(seq) != str(rev_seq)
-    assert len(rev_seq.n_glycan_sequon_sites) > 0, (str(rev_seq), seq)
     # print (str(seq), str(rev_seq))
     fragments_dict = fragments(rev_seq)
     decoy = dict(theoretical_sequence)

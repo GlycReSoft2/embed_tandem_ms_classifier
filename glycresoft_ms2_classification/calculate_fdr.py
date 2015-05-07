@@ -128,9 +128,12 @@ def main(scored_matches_path, decon_data=None, model_file_path=None, decoy_match
     scored_matches_frame.metadata["fdr"] = fdr_search.compress()
     scored_matches_frame["call"] = scored_matches_frame.Glycopeptide_identifier.isin(
         scored_matches_frame.kvquery().Glycopeptide_identifier)
-    logger.info("Accepted %d predictions with FDR %f",
-                scored_matches_frame.call.sum(),
-                scored_matches_frame.optimize_fdr().iloc[0]["false_discovery_rate"])
+    try:
+        logger.info("Accepted %d predictions with FDR %f",
+                    scored_matches_frame.call.sum(),
+                    scored_matches_frame.optimize_fdr().iloc[0]["false_discovery_rate"])
+    except:
+        logger.info("No predictions were found at an acceptable FDR")
     scored_matches_frame.serialize(outfile_path)
 
     return outfile_path

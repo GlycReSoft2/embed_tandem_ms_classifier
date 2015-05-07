@@ -43,6 +43,76 @@ def try_type(obj):
         except:
             return str(obj)
 
+class DebugPipeline(unittest.TestCase):
+    db_file_name = "test_data/Phil-82-Chemotrypsin/ResultOf20150428_04_isos.db"
+    ms1_matching_output_file = "test_data/Phil-82-Chemotrypsin/ResultOf20150428_04_isos.csv"
+    ms2_decon_file = "test_data/Phil-82-Chemotrypsin/20150428_04_isos_individual_scans_processed.yaml"
+    glycosylation_sites_file = "test_data/Phil-82-Chemotrypsin/Phil82-glycosites.txt"
+    protein_prospector_file = "test_data/Phil-82-Chemotrypsin/KK_Phil-82-Chymo.xml"
+
+    postprocessed_ions_file = "test_data/Phil-82-Chemotrypsin/ResultOf20150428_04_isos.processed.json"
+    classification_results_file = "test_data/Phil-82-Chemotrypsin/ResultOf20150428_04_isos.scored.json"
+
+    method = "full_random_forest"
+    test_model_file_path = "test_data/USSRInfluenzaModel.json"
+    methods = classify_matches.ModelTask.method_table.keys()
+    ms1_match_tolerance = 1E-05
+    ms2_match_tolerance = 2E-05
+    num_procs = 4
+    num_decoys = 1
+
+    constant_modifications = ["Carbamidomethyl (C)"]
+    variable_modifications = ["Deamidated (N)", "Deamidated (Q)"]
+
+    def test_1_theoretical_ion_space_step(self):
+        print("test_1_theoretical_ion_space_step")
+        ms_digest = MSDigestParamters.parse(self.protein_prospector_file)
+        theo_ions = entry_point.generate_theoretical_ion_space(
+            self.ms1_matching_output_file, self.glycosylation_sites_file,
+            ms_digest.constant_modifications, ms_digest.variable_modifications,
+            ms_digest.enzyme, self.num_procs)
+        self.assertTrue(os.path.exists(theo_ions))
+        self.theoretical_ion_space_file = theo_ions
+        theoretical_ions = SqliteDict(theo_ions, tablename="theoretical_search_space")
+        print len(theoretical_ions)
+
+
+    def test_2_match_ions_step(self):
+        print("test_2_match_ions_step")
+        matches = entry_point.match_deconvoluted_ions(
+            self.db_file_name, self.ms2_decon_file,
+            self.ms1_match_tolerance, self.ms2_match_tolerance, self.num_procs)
+        #self.assertTrue(os.path.exists(matches))
+        self.ms2_match_file = matches
+        print(self.ms2_match_file)
+
+    def test_3_postprocess_matches_step(self):
+        print("test_3_postprocess_matches_step")
+        self.postprocessed_ions_file = entry_point.postprocess_matches(
+            self.db_file_name)
+        #self.assertTrue(os.path.exists(self.postprocessed_ions_file))
+        print(self.postprocessed_ions_file)
+
+    def test_5_classify_with_model_step(self):
+        print("test_5_classify_with_model_step")
+        warnings.simplefilter(action="error")
+        print(self.test_model_file_path)
+        self.classification_results_file = entry_point.classify_data_by_model(self.postprocessed_ions_file,
+                                                                              self.test_model_file_path,
+                                                                              method=self.method)
+        print(self.classification_results_file)
+        #self.assertTrue(os.path.exists(self.classification_results_file))
+
+    def test_7_calculate_fdr_step(self):
+        print("test_7_calculate_fdr_step")
+
+        predicates = calculate_fdr.default_predicates()
+        self.fdr_results = calculate_fdr.main(self.classification_results_file, self.ms2_decon_file,
+                                              self.test_model_file_path, suffix_len=1,
+                                              num_decoys_per_real_mass=self.num_decoys,
+                                              predicate_fns=predicates, n_processes=self.num_procs)
+        #self.assertTrue(os.path.exists(self.classification_results_file[:-5] + "_fdr.json"))
+
 class IonMatchingPipeline(unittest.TestCase):
     db_file_name = "test_data/USSR/Resultsof20131219_005.db"
     ms1_matching_output_file = "test_data/USSR/Resultsof20131219_005.csv"

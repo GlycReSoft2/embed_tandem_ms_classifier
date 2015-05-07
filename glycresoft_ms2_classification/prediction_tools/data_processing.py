@@ -434,6 +434,8 @@ class PredictionResults(object):
         if "fdr" not in self.metadata:
             raise KeyError("The FDR has not been calculated")
         fdr = self.metadata.get("fdr")
+        if len(fdr.index) == 0:
+            return fdr
         # return fdr.ix[fdr.query("false_discovery_rate <= 0.05").num_real_matches.idxmax()]
         return fdr.query("false_discovery_rate <= 0.05").sort(
             ["num_real_matches"], ascending=False).iloc[:n]
@@ -443,6 +445,9 @@ class PredictionResults(object):
             frame = self.optimize_fdr()
         elif frame is None:
             frame = pd.DataFrame([{}])
+        if len(frame.index) == 0:
+            # Get an empty frame.
+            return self.query("MS2_Score < -10")
         args = {k: v for k, v in frame.to_dict(orient="records")[0].items()
                 if k not in {"false_discovery_rate", "num_real_matches", "num_decoy_matches"}}
         args.update(kwargs)
