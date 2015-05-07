@@ -63,11 +63,15 @@ def fragments(seq):
 def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
     seq = Sequence(theoretical_sequence["Glycopeptide_identifier"])
     pref = seq[:prefix_len]
-    suf = seq[-suffix_len:]
-    body = seq[prefix_len:(-suffix_len)]
+    if suffix_len == 0:
+        suf = ""
+        body = seq[prefix_len:]
+    else:
+        suf = seq[-suffix_len:]
+        body = seq[prefix_len:-suffix_len]
     body = body[::-1]
     rev_seq = (list_to_sequence(pref + list(body) + suf))
-
+    assert seq != rev_seq
     fragments_dict = fragments(rev_seq)
     decoy = dict(theoretical_sequence)
     decoy.update(fragments_dict)

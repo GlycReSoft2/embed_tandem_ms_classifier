@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.DEBUG, filename=logfile, filemode='w',
                     datefmt="%H:%M:%S")
 logger = logging.getLogger()
 
+from error_code_interface import *
 
 # Handles URI Decoding incompatibility with py2K
 # Import the pipeline modules, wrapping any ImportErrors in the cross-runtime communication

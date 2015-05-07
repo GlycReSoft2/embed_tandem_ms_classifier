@@ -82,4 +82,4 @@ def convert_dict_to_sequence(sequence_dict, parent_protein):
         except:
             print(evidence)
             raise
-exclude_keys_from_sequence_dict = set(("accession", "isDecoy"))
+exclude_keys_from_sequence_dict = set(("accession", "isDecoy", "PeptideEvidenceRef"))

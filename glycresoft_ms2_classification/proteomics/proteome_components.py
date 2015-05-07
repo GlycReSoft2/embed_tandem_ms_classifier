@@ -42,6 +42,13 @@ class Proteome(dict):
                 for peptide in ifilter(peptide_filter, protein):
                     yield peptide
 
+    def subset(self, accession_list):
+        d = dict()
+        for acc in accession_list:
+            d[acc] = self[acc]
+        subset = Proteome(d)
+        return subset
+
 
 class ReferenceProtein(object):
     def __init__(self, sequence_dict):
@@ -134,14 +141,14 @@ class PeptideMatch(Sequence):
 
     @property
     def n_glycan_sequon_sites(self):
+        sites = set(sequence.find_n_glycosylation_sequons(self))
         if self.parent is not None:
-            return tuple(site - self.start for site in self.parent.n_glycan_sequon_sites
+            sites |= set(site - self.start for site in self.parent.n_glycan_sequon_sites
                          if self.start <= site < self.end and len(self.seq[site - self.start][1]) == 0)
-        else:
-            return sequence.find_n_glycosylation_sequons(self)
+        return tuple(sites)
 
     def __hash__(self):
-        return hash(str(self))
+        return hash((str(self), self.parent.accession, self.start, self.end))
 
     def __repr__(self):
         seq = super(PeptideMatch, self).__str__()

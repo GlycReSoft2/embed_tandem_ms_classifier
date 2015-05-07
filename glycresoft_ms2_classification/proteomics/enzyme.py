@@ -1,3 +1,5 @@
+import warnings
+
 # Required information for generating peptides that can be cleaved by a given protease
 enzymes = {
     "trypsin": {
@@ -9,4 +11,8 @@ enzymes = {
 
 
 def get_enzyme(name):
-    return enzymes[name.lower()]
+    try:
+        return enzymes[name.lower()]
+    except:
+        warnings.warn("Could not identify protease {}".format(name))
+        return name
