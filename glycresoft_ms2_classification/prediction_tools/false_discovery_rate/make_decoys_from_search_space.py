@@ -9,10 +9,10 @@ import argparse
 import sqlitedict
 
 from glycresoft_ms2_classification.structure import sequence, constants
+from glycresoft_ms2_classification.structure.parser import sequence_tokenizer_respect_sequons
 
 Sequence = sequence.Sequence
 list_to_sequence = sequence.list_to_sequence
-
 logger = logging.getLogger()
 
 
@@ -61,7 +61,7 @@ def fragments(seq):
 
 
 def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
-    seq = Sequence(theoretical_sequence["Glycopeptide_identifier"])
+    seq = sequence_tokenizer_respect_sequons(theoretical_sequence["Glycopeptide_identifier"])
     pref = seq[:prefix_len]
     if suffix_len == 0:
         suf = ""
@@ -71,7 +71,9 @@ def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
         body = seq[prefix_len:-suffix_len]
     body = body[::-1]
     rev_seq = (list_to_sequence(pref + list(body) + suf))
-    assert seq != rev_seq
+    assert str(seq) != str(rev_seq)
+    assert len(rev_seq.n_glycan_sequon_sites) > 0, (str(rev_seq), seq)
+    # print (str(seq), str(rev_seq))
     fragments_dict = fragments(rev_seq)
     decoy = dict(theoretical_sequence)
     decoy.update(fragments_dict)
@@ -117,5 +119,8 @@ def taskmain(predictions_path, n_processes=4, prefix_len=0, suffix_len=0, out=No
                 logger.info("Processed %d decoys", cntr)
                 decoy_table.commit()
     decoy_table.commit()
+    print len(decoy_table), len(theoretical_sequences)
+    if len(decoy_table) == 0:
+        raise Exception("No decoys generated")
     logger.info("Decoy creation complete.")
     return decoy_path

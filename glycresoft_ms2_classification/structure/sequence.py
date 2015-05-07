@@ -69,11 +69,11 @@ def find_n_glycosylation_sequons(sequence, allow_modified=False):
         if state == "seek":
             # A sequon starts with an Asn residue without modifications, or for counting
             # purposes one that has already been glycosylated
-            if next_pos[0] == asn and\
-                    (((len(next_pos[1]) == 0 or next_pos[1][0]) == ''
-                     or allow_modified) or "HexNAc" in next_pos[1]):
-                n_pos = i
-                state = "n"
+            if next_pos[0] == asn:
+                if ((len(next_pos[1]) == 0) or (next_pos[1][0] == '')
+                   or allow_modified or "HexNAc" in next_pos[1]):
+                    n_pos = i
+                    state = "n"
         elif state == "n":
             if next_pos[0] != pro:
                 state = "^p"

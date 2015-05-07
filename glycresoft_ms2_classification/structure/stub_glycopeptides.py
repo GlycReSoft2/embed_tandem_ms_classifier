@@ -13,6 +13,11 @@ dHex = 146.05791
 Water = 18.0105647000
 
 
+glycan_losses = {
+    
+}
+
+
 class StubGlycopeptide:
 
     """Calculates peptide and stub glycopeptide ions, also returns oxonium ions based on glycan composition"""

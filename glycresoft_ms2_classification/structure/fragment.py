@@ -34,7 +34,7 @@ fragment_direction = {
 }
 
 
-class Fragment:
+class Fragment(object):
     """Glycopeptide Fragment"""
 
     parser = re.compile("(?P<kind>[abcxyzABCXYZ])(?P<position>[0-9]+)(?P<modificaiton>\+.*)?")

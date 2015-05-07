@@ -134,6 +134,7 @@ def sequence_tokenizer(sequence, implicit_n_term=None, implicit_c_term=None):
 # Unused alias
 parse = sequence_tokenizer
 
+
 #@memocpy(20000)
 def rsequence_tokenizer(sequence, implicit_n_term=None, implicit_c_term=None):
     '''
