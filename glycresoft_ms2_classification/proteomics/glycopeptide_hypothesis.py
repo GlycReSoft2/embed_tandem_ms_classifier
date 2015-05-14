@@ -8,7 +8,7 @@ from glycresoft_ms2_classification.structure import glycans as glycan_lib
 from glycresoft_ms2_classification.structure import modification
 from glycresoft_ms2_classification.structure import composition
 
-logging.basicConfig(level="DEBUG")
+logger = logging.getLogger(__name__)
 
 Modification = modification.Modification
 ModificationTable = modification.ModificationTable
@@ -37,8 +37,7 @@ class GlycopeptideHypothesis(object):
                 # Consider all combinations of sites (order does not matter)
                 for sites in itertools.combinations(peptide.n_glycan_sequon_sites, glycan_count):
                     target = peptide.clone()
-                    glycan_composition = np.zeros(
-                        len(glycans[0].composition))
+                    glycan_composition = np.zeros(len(glycans[0].composition))
                     glycan_iter = iter(glycans)
                     for site in sites:
                         glycan = glycan_iter.next()
@@ -58,7 +57,7 @@ class GlycopeptideHypothesis(object):
             glycan_cache = set()
             for glycans in itertools.product(self.glycans, repeat=glycan_count):
                 for sites in itertools.permutations(peptide.n_glycan_sequon_sites, glycan_count):
-                    logging.debug(sites)
+                    logger.debug(sites)
                     target = peptide.clone()
                     glycan_composition = np.zeros(
                         len(glycans[0].composition))
@@ -72,16 +71,17 @@ class GlycopeptideHypothesis(object):
                     glycan_composition_string = "[{0}]".format(
                         ";".join(map(lambda x: str(int(x)), glycan_composition)))
                     target.glycan = glycan_composition_string
-                    logging.debug(target)
+                    logger.debug(target)
                     yield target
 
-
     def combine(self, position_specific=False, include_unglycosylated_peptides=False):
+        logger.debug("Combining glycans and peptides")
         if position_specific:
             position_selector = itertools.permutations
         else:
             position_selector = itertools.combinations
         for peptide in self.proteome.peptides(no_dups=True):
+            logger.debug("Handling %s, %s glycosylation sites", peptide, peptide.n_glycan_sequon_sites)
             n_sites = len(peptide.n_glycan_sequon_sites)
             if n_sites == 0:
                 if include_unglycosylated_peptides:
@@ -91,13 +91,14 @@ class GlycopeptideHypothesis(object):
                 for glycan_count in range(1, n_sites + 1):
                     glycan_cache = set()
                     for glycans in itertools.product(self.glycans, repeat=glycan_count):
+                        logger.debug("Mixing %s", glycans)
                         # Check if we've already used this glycan combination before to avoid
                         # duplicating effort for this peptide.
-                        if not position_specific:
-                            if frozenset(glycans) in glycan_cache:
-                                continue
-                            else:
-                                glycan_cache.add(frozenset(glycans))
+                        if frozenset(glycans) in glycan_cache:
+                            continue
+                        else:
+                            glycan_cache.add(frozenset(glycans))
+                            logger.debug("Cache Miss")
                         # Consider all combinations of sites (order does not
                         # matter)
                         for sites in position_selector(peptide.n_glycan_sequon_sites, glycan_count):
@@ -121,7 +122,7 @@ class GlycopeptideHypothesis(object):
                     glycan_cache = set()
                     for glycans in itertools.product(self.glycans, repeat=glycan_count):
                         for sites in position_selector(peptide.n_glycan_sequon_sites, glycan_count):
-                            logging.debug(sites)
+                            logger.debug(sites)
                             target = peptide.clone()
                             glycan_composition = np.zeros(
                                 len(glycans[0].composition))
@@ -135,7 +136,7 @@ class GlycopeptideHypothesis(object):
                             glycan_composition_string = "[{0}]".format(
                                 ";".join(map(lambda x: str(int(x)), glycan_composition)))
                             target.glycan = glycan_composition_string
-                            logging.debug(target)
+                            logger.debug(target)
                             yield target
 
     def main(self, position_specific=False):

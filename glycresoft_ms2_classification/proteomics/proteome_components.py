@@ -101,8 +101,8 @@ class ReferenceProtein(object):
 
     @property
     def n_glycan_sequon_sites(self):
-        return sequence.find_n_glycosylation_sequons(self.sequence) +\
-               self.metadata.get("n_glycan_sequon_sites", [])
+        return list(set(sequence.find_n_glycosylation_sequons(self.sequence) +
+                        self.metadata.get("n_glycan_sequon_sites", [])))
 
     def describe(self):
         rep = '''>{accession} with {num_peptides} peptides

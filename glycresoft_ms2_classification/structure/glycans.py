@@ -44,7 +44,7 @@ class Glycan(object):
         return AnonymousModificationRule("Glycan[{0}]".format(';'.join(map(str, self.composition))), self.mass)
 
     def __repr__(self):
-        return "Glycan({composition} {mass})".format(**self.__dict__)
+        return "Glycan({composition} {mass} {data})".format(**self.__dict__)
 
     def __hash__(self):
         return hash(str(self))
@@ -67,11 +67,34 @@ class Glycan(object):
 
     def dehydrate(self):
         if "Water" in self.glycan_identities:
-            i = self.glycan_identities.index("Water")
-            if self.composition[i] > 0:
-                self.composition[i] -= 1
-                self.mass -= Composition("H2O").mass
+            try:
+                i = self.glycan_identities.index("Water")
+                if self.composition[i] > 0:
+                    self.composition[i] -= 1
+            except Exception, e:
+                print e
+            self.mass -= Composition("H2O").mass
+        return self
 
+    def deadduct(self):
+        if "adduct" in self.data:
+            self.mass -= self.data['adduct'].mass
+        return self
+
+
+class Adduct(object):
+
+    @classmethod
+    def from_csv(cls, row):
+        symbol, mass = row["Adduct/Replacement"].split("/")
+        mass = float(mass)
+        amount = int(row["Adduct Amount"])
+        return cls(symbol, mass, amount)
+
+    def __init__(self, symbol, singleton_mass, amount):
+        self.symbol = symbol
+        self.amount = amount
+        self.mass = singleton_mass * amount
 
 
 class GlycanHypothesis(list):
@@ -101,6 +124,39 @@ class GlycanHypothesis(list):
             elif extract_state:
                 glycan_identity.append(col.replace("G:", ""))
         return glycan_identity
+
+
+class GlycanMS1Results(list):
+    def __init__(self, csv_path=None):
+        if csv_path is not None:
+            self.reader = csv.DictReader(open(csv_path))
+            self.glycan_identities = self.get_glycan_identities(self.reader.fieldnames)
+            self.extend(self.reader)
+        self.extract_glycans()
+
+    def get_glycan_identities(self, colnames):
+        glycan_identity = []
+        extract_state = False
+        for col in colnames:
+            if col == "Hypothesis MW":
+                extract_state = True
+                continue
+            elif col == "Adduct/Replacement":
+                extract_state = False
+                break
+            elif extract_state:
+                glycan_identity.append(col.replace("G:", ""))
+        return glycan_identity
+
+    def extract_glycans(self):
+        self.glycans = list({Glycan(float(r["Hypothesis MW"]),
+                                    r["Compositions"],
+                                    score=float(r["Score"]),
+                                    volume=float(r["Total Volume"]),
+                                    glycan_identities=self.glycan_identities,
+                                    adduct=Adduct.from_csv(r)) for r in self
+                            if r["Compositions"] != "0"})
+        return self.glycans
 
 
 def from_predictions(frame):

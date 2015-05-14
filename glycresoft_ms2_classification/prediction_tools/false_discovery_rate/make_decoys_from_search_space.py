@@ -60,6 +60,25 @@ def fragments(seq):
     return fragments_dict
 
 
+def pair_rotate(sequence):
+    chunks = []
+    gen = iter(sequence)
+    while True:
+        chunk = []
+        try:
+            chunk = [gen.next()]
+            chunk.append(gen.next())
+            chunks.append(chunk)
+        except StopIteration:
+            if len(chunk) > 0:
+                chunks.append(chunk)
+            break
+    rev_seq = []
+    for chunk in reversed(chunks):
+        rev_seq.extend(chunk)
+    return rev_seq
+
+
 def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
     seq = sequence_tokenizer_respect_sequons(theoretical_sequence["Glycopeptide_identifier"])
     pref = seq[:prefix_len]
@@ -71,8 +90,10 @@ def make_decoy(theoretical_sequence, prefix_len=0, suffix_len=0):
         body = seq[prefix_len:-suffix_len]
     body = body[::-1]
     rev_seq = (list_to_sequence(pref + list(body) + suf))
-    assert str(seq) != str(rev_seq)
-    # print (str(seq), str(rev_seq))
+    if str(list_to_sequence(seq)) == str(rev_seq):
+        rot_body = pair_rotate(body)
+        rev_seq = (list_to_sequence(pref + list(rot_body) + suf))
+
     fragments_dict = fragments(rev_seq)
     decoy = dict(theoretical_sequence)
     decoy.update(fragments_dict)

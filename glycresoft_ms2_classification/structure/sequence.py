@@ -406,7 +406,7 @@ class Sequence(PeptideSequenceBase):
 
     def drop_modification(self, pos, mod_type):
         '''
-            Drop a modification by name from a specific residue
+        Drop a modification by name from a specific residue
         '''
         dropped_index = None
         for i, mod in enumerate(self.seq[pos][1]):
@@ -439,8 +439,8 @@ class Sequence(PeptideSequenceBase):
     def get_sequence(self, start=0, include_glycan=True, include_termini=True,
                      implicit_n_term=None, implicit_c_term=None):
         """
-           Generate human readable sequence string.
-           DQYELLC(Carbamidomethyl)LDN(HexNAc)TR
+        Generate human readable sequence string.
+        DQYELLC(Carbamidomethyl)LDN(HexNAc)TR
         """
         if implicit_n_term is None:
             implicit_n_term = structure_constants.N_TERM_DEFAULT
