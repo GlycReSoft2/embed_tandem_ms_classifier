@@ -16,7 +16,7 @@ def uri_decode_list(uri_list=None):
     return map(uri_decode, uri_list)
 
 
-class MSDigestParamters(object):
+class MSDigestParameters(object):
     '''A port of our quick and dirty Protein Prospector MSDigest parser for just
     modifications'''
     @classmethod
@@ -35,7 +35,7 @@ class MSDigestParamters(object):
             missed_cleavages.extend(int(node.text) for node in parameter_node.iterfind(".//missed_cleavages"))
             enzyme.extend(node.text for node in parameter_node.iterfind("enzyme"))
 
-        return MSDigestParamters(constant_modifications, variable_modifications, missed_cleavages, enzyme)
+        return MSDigestParameters(constant_modifications, variable_modifications, missed_cleavages, enzyme)
 
     def __init__(self, constant_modifications=None, variable_modifications=None, missed_cleavages=None, enzyme=None):
         self.constant_modifications = constant_modifications
@@ -48,4 +48,4 @@ class MSDigestParamters(object):
 
 if __name__ == '__main__':
     import sys
-    print(MSDigestParamters.parse(sys.argv[1]))
+    print(MSDigestParameters.parse(sys.argv[1]))

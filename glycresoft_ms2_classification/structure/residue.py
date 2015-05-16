@@ -105,3 +105,9 @@ class Residue(ResidueBase):
         if isinstance(other, Residue):
             other = other.name
         return self.name != other
+
+    def __getstate__(self):
+        return [self.name, self.symbol, self.mass]
+
+    def __setstate__(self, state):
+        self.name, self.symbol, self.mass = state

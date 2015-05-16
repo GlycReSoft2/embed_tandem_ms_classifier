@@ -5,15 +5,17 @@ import functools
 import itertools
 import logging
 import random
-logger = logging.getLogger(__name__)
-
+try:
+    logger = logging.getLogger(__name__)
+except:
+    pass
 from os.path import splitext
 from collections import Counter, defaultdict
 
 import sqlitedict
 
 from glycresoft_ms2_classification.error_code_interface import NoIonsMatchedException
-from glycresoft_ms2_classification.utils import try_get_outfile, collectiontools
+from glycresoft_ms2_classification.utils import collectiontools
 from glycresoft_ms2_classification.ms.bupid_topdown_deconvoluter import BUPIDYamlParser
 from glycresoft_ms2_classification.ms import default_loader, default_serializer
 from glycresoft_ms2_classification.ms import DeconIOBase, MSMSSqlDB, ObservedPrecursorSpectrum

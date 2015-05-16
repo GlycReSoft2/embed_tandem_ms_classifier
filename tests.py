@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.DEBUG, filemode='w',
 logger = logging.getLogger()
 from sqlitedict import SqliteDict
 
-from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
+from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParameters
 
 from glycresoft_ms2_classification import theoretical_glycopeptide
 from glycresoft_ms2_classification import calculate_fdr
@@ -66,7 +66,7 @@ class DebugPipeline(unittest.TestCase):
 
     def test_1_theoretical_ion_space_step(self):
         print("test_1_theoretical_ion_space_step")
-        ms_digest = MSDigestParamters.parse(self.protein_prospector_file)
+        ms_digest = MSDigestParameters.parse(self.protein_prospector_file)
         theo_ions = entry_point.generate_theoretical_ion_space(
             self.ms1_matching_output_file, self.glycosylation_sites_file,
             ms_digest.constant_modifications, ms_digest.variable_modifications,
@@ -136,7 +136,7 @@ class IonMatchingPipeline(unittest.TestCase):
 
     def test_1_theoretical_ion_space_step(self):
         print("test_1_theoretical_ion_space_step")
-        ms_digest = MSDigestParamters.parse(self.protein_prospector_file)
+        ms_digest = MSDigestParameters.parse(self.protein_prospector_file)
         theo_ions = entry_point.generate_theoretical_ion_space(
             self.ms1_matching_output_file, self.glycosylation_sites_file,
             ms_digest.constant_modifications, ms_digest.variable_modifications,

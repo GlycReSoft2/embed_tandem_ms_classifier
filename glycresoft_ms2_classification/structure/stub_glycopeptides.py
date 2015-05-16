@@ -14,7 +14,7 @@ Water = 18.0105647000
 
 
 glycan_losses = {
-    
+
 }
 
 

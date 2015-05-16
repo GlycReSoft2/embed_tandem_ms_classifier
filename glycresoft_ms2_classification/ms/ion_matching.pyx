@@ -189,7 +189,7 @@ cdef CObservedPrecursorSpectrum CObservedPrecursorSpectrum_from_sql(object row):
         double neutral_mass
         list scans, scan_ids, tandem_data
         int charge, _iterkey
-        dict other_datai
+        dict other_data
         CObservedPrecursorSpectrum inst
     scans = json.loads(row["scan_data"])
     scan_ids = [s['id'] for s in scans]
@@ -453,7 +453,8 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
             "Stub_ions": merge_observed_matches(stub_type),
             
             "scan_id": scan_id_range[0],
-            "scan_id_range": scan_id_range
+            "scan_id_range": scan_id_range,
+            "protein_id": theoretical.get("protein_id")
         })
 
     return [results, did_match_counter, annotate]

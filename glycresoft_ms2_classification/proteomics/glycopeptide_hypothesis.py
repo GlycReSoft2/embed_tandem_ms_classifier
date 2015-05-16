@@ -154,7 +154,7 @@ class GlycopeptideHypothesis(object):
 def legacy_format(stream, glycopeptides_iter, glycan_identities=None, protease=None):
     if glycan_identities is None:
         glycan_identities = []
-    columns = ["Molecular Weight", "C", "Composition"] + glycan_identities +\
+    columns = ["Molecular Weight", "C", "Compositions"] + glycan_identities +\
               ["Adduct/Replacement", "Adduct Amount", "Peptide Sequence", "Peptide Modification",
                "Peptide Missed Cleavage Number", "Number of Glycan Attachment to Peptide", "Start AA",
                "End AA", "ProteinID"]

@@ -33,7 +33,7 @@ try:
     # Pipeline Steps as Modules
     from glycresoft_ms2_classification.structure.sequence_space import UnqualifiedModifierException
     from glycresoft_ms2_classification.structure.sequence_space import NoSitesFoundException
-    from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParamters
+    from glycresoft_ms2_classification.proteomics.msdigest_xml_parser import MSDigestParameters
     from glycresoft_ms2_classification import theoretical_glycopeptide
     from glycresoft_ms2_classification import match_ions2
     from glycresoft_ms2_classification import postprocess2
@@ -429,7 +429,7 @@ def main():
                 args['variable_modification_list'])
 
         if 'protein_prospector_xml' in args and args["protein_prospector_xml"] is not None:
-            ms_digest = MSDigestParamters.parse(args["protein_prospector_xml"])
+            ms_digest = MSDigestParameters.parse(args["protein_prospector_xml"])
             args[
                 "constant_modification_list"] = ms_digest.constant_modifications
             args[

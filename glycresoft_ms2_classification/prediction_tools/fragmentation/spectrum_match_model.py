@@ -4,18 +4,19 @@ import random
 from bitarray import bitarray
 
 from glycresoft_ms2_classification.ms import spectra
-from glycresoft_ms2_classification.structure import sequence, glycans
+from glycresoft_ms2_classification.structure import sequence, glycans, stub_glycopeptides
 
 
 oxonium_ions = dict(glycans.oxonium_ions)
 extract_annotations = spectra.extract_annotations
 Sequence = sequence.Sequence
+StubGlycopeptide = stub_glycopeptides.StubGlycopeptide
 
 
 def sequence_to_bit_vector(seq_obj, frag_type='b', tol=1):
     tol = int(tol)
-    total_mass = int(seq_obj.mass)
-    bit_vector = bitarray('0') * (total_mass) * tol
+    total_mass = int(seq_obj.mass * tol)
+    bit_vector = bitarray('0') * (total_mass)
     for fragment in itertools.chain.from_iterable(seq_obj.get_fragments(frag_type)):
         bit_vector[int(fragment.mass) * tol] = True
     return bit_vector
@@ -29,6 +30,7 @@ def spectrum_to_bit_vector(spec_obj, tol=1):
     bit_vector = bitarray('0') * total_mz * tol
     for tand in spec_obj.tandem_data:
         bit_vector[int(tand.neutral_mass) * tol] = True
+    mask_oxonium_ions(bit_vector, tol)
     return bit_vector
 
 
@@ -38,10 +40,22 @@ def sequences_from_annotation(precursor):
     return ((precursor, s) for s in seqs)
 
 
+def mask_oxonium_ions(precursor_bits, tol=1):
+    for ion_type, mass in oxonium_ions.items():
+        precursor_bits[int(mass * tol)] = 0
+
+
+def mask_masses(mass_list, precursor_bits, tol=1):
+    for mass in mass_list:
+        precursor_bits[int(mass * tol)] = 0
+
+
 def preprocess(psms, frag_type='b', tol=1):
     for spec, pep in psms:
+        stubs = [f['mass'] for f in StubGlycopeptide.from_sequence(pep).get_stubs()]
         pep_bits = sequence_to_bit_vector(pep, frag_type, tol)
         spec_bits = spectrum_to_bit_vector(spec, tol)
+        mask_masses(stubs, spec_bits, tol)
         yield spec_bits, pep_bits
 
 
