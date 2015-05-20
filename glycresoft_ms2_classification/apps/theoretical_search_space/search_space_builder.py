@@ -323,7 +323,8 @@ def from_sequence(row, glycan_identity):
     if len(ms1_result.peptide_sequence) == 0:
         return []
     seq = Sequence(ms1_result.peptide_sequence)
-    return [generate_fragments(seq, ms1_result)]
+    product = generate_fragments(seq, ms1_result)
+    return [product]
 
 
 def process_predicted_ms1_ion(row, modification_table, site_list_map, glycan_identity):
@@ -531,3 +532,6 @@ class MS1ResultsFile(object):
     def __iter__(self):
         for row in self.reader:
             yield MS1GlycopeptideResult.from_csvdict(self.glycan_identities, **row)
+
+
+parse_digest = msdigest_xml_parser.MSDigestParameters.parse

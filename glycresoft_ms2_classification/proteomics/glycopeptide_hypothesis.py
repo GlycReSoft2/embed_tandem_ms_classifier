@@ -1,6 +1,10 @@
+import functools
 import csv
 import itertools
 import logging
+import multiprocessing
+
+import sqlitedict
 
 import numpy as np
 
@@ -15,6 +19,45 @@ ModificationTable = modification.ModificationTable
 Composition = composition.Composition
 
 Glycan = glycan_lib.Glycan
+
+
+def glycosylate_callback(peptide, glycans, position_selector):
+    n_sites = len(peptide.n_glycan_sequon_sites)
+    result = []
+    for glycan_count in range(1, n_sites + 1):
+        glycan_cache = set()
+        for glycans in itertools.product(glycans, repeat=glycan_count):
+            # logger.debug("Mixing %s", glycans)
+            # Check if we've already used this glycan combination before to avoid
+            # duplicating effort for this peptide.
+            if frozenset(glycans) in glycan_cache:
+                continue
+            else:
+                glycan_cache.add(frozenset(glycans))
+                # logger.debug("Cache Miss")
+            # Consider all combinations of sites (order does not
+            # matter)
+            for sites in position_selector(peptide.n_glycan_sequon_sites, glycan_count):
+                target = peptide.clone()
+                glycan_composition = np.zeros(
+                    len(glycans[0].composition))
+                glycan_iter = iter(glycans)
+                for site in sites:
+                    glycan = glycan_iter.next()
+                    hexnac = Modification("HexNAc")
+                    hexnac.mass = glycan.mass
+                    # There may already be a glycan included here by the proteomics
+                    # search engine. Remove it  so we can do a general search.
+                    if len(target[site][1]) > 0:
+                        target.drop_modification(site, target[site][1][0])
+                    target.add_modification(site, hexnac)
+                    glycan_composition += np.array(
+                        glycan.composition)
+                glycan_composition_string = Glycan.glycan_composition_string(
+                    glycan_composition)
+                target.glycan = glycan_composition_string
+                result.append(target)
+    return result
 
 
 class GlycopeptideHypothesis(object):
@@ -110,6 +153,10 @@ class GlycopeptideHypothesis(object):
                                 glycan = glycan_iter.next()
                                 hexnac = Modification("HexNAc")
                                 hexnac.mass = glycan.mass
+                                # There may already be a glycan included here by the proteomics
+                                # search engine. Remove it  so we can do a general search.
+                                if len(target[site][1]) > 0:
+                                    target.drop_modification(site, target[site][1][0])
                                 target.add_modification(site, hexnac)
                                 glycan_composition += np.array(
                                     glycan.composition)
@@ -148,7 +195,17 @@ class GlycopeptideHypothesis(object):
 
     def to_legacy(self, stream, protease=None):
         legacy_format(
-            stream, self.combine(), self.glycans[0].glycan_identities, protease)
+            stream, self.pcombine(), self.glycans[0].glycan_identities, protease)
+
+    def pcombine(self, n_processes=2):
+        position_selector = itertools.combinations
+        task_fn = functools.partial(glycosylate_callback, glycans=self.glycans, position_selector=position_selector)
+        pool = multiprocessing.Pool(n_processes, maxtasksperchild=1)
+        for result in (pool.imap_unordered(task_fn, (p for p in self.proteome.peptides() if len(p.n_glycan_sequon_sites) > 0), chunksize=1)):
+            for item in result:
+                logger.debug("Finished %s", item)
+                yield item
+            del result
 
 
 def legacy_format(stream, glycopeptides_iter, glycan_identities=None, protease=None):

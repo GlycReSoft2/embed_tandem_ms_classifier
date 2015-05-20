@@ -103,7 +103,8 @@ def main(db_file, output_file=None):
                                    "scan_id": row['scan_id'],
                                    "scan_id_range": row["scan_id_range"],
                                    "bad_oxonium_ions": bad_oxonium_ions,
-                                   "glycan_composition": glycans
+                                   "glycan_composition": glycans,
+                                   "protein_id": row.get("protein_id")
                                    })
         else:
             did_not_match.append(row["Glycopeptide_identifier"])
