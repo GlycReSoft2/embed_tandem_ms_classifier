@@ -479,7 +479,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     theoretical_search_space = sqlitedict.SqliteDict(
         db_file, tablename="theoretical_search_space")
     if isinstance(decon_data, str):
-        if decon_data_format != "db":
+        if decon_data_format != "db" and splitext(decon_data)[1] != '.db':
             data = ParallelParser(decon_format_lookup[decon_data_format], (decon_data,))
             db = None
         else:

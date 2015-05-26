@@ -106,7 +106,8 @@ class CountExclusion(object):
         for feature_levels, owned_indices in self.decoys.groupby(names).groups.items():
             decoy_array.loc[tuple(apply_fn(slice_back, feature_levels))] += len(owned_indices)
 
-        self.trials = np.divide(decoy_array * (1 + (1/self.decoy_ratio)), decoy_array + prediction_array).to_dataframe()
+        #self.trials = np.divide(decoy_array * (1 + (1/self.decoy_ratio)), decoy_array + prediction_array).to_dataframe()
+        self.trials = np.divide(decoy_array, prediction_array).to_dataframe()
         self.trials.reset_index(drop=False, inplace=True)
         self.trials.rename(columns={None: "false_discovery_rate"}, inplace=True)
         self.trials["num_real_matches"] = np.ravel(prediction_array)
