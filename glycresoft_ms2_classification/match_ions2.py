@@ -534,6 +534,8 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                 for m in matches:
                     fragment_match_store[cntr] = m
                     cntr += 1
+                    if cntr % 1000 == 0:
+                        logger.info("Matched %d precursors", cntr)
                 did_match_counter += counter
                 combine_annotations(annotate_accumulator, annotater)
         else:
