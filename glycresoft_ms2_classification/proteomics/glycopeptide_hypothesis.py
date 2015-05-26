@@ -193,9 +193,9 @@ class GlycopeptideHypothesis(object):
             if prompt == "q":
                 break
 
-    def to_legacy(self, stream, protease=None):
+    def to_legacy(self, stream, protease=None, n_processes=2):
         legacy_format(
-            stream, self.pcombine(), self.glycans[0].glycan_identities, protease)
+            stream, self.combine(), self.glycans[0].glycan_identities, protease)
 
     def pcombine(self, n_processes=2):
         position_selector = itertools.combinations

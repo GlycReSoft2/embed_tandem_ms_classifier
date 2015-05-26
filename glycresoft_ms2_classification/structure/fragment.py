@@ -1,6 +1,7 @@
 import re
 
 from .modification import Modification
+from .composition import Composition
 from ..utils.collectiontools import descending_combination_counter
 
 fragment_pairing = {
@@ -16,6 +17,13 @@ fragment_pairing = {
     "Y": "B",
     "z": "c",
     "Z": "C",
+}
+
+fragment_shift ={
+    'b': Composition('H+').mass,
+    'B': Composition('H+').mass,
+    'y': Composition('H2O').mass + Composition('H+').mass,
+    'Y': Composition('H2O').mass + Composition('H+').mass
 }
 
 fragment_direction = {

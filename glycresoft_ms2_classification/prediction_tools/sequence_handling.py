@@ -201,7 +201,7 @@ def build_ion_map(ion_set, ion_type, length):
 
 
 def stubs_observed_expected_ratio(row):
-    obs = row.numStubs
+    obs = len({stub['key'].split(':')[0] for stub in row.Stub_ions})
     expected = len(StubGlycopeptide.from_sequence(
         Sequence(row.Glycopeptide_identifier)).get_stubs())
     return obs/float(expected)

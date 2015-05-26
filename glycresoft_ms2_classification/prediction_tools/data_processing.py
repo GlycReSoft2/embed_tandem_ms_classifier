@@ -238,16 +238,6 @@ def infer_glycan_mass(data_struct):
     return data_struct
 
 
-# TODO
-def recalibrate_mass_accuracy(data_struct, ms1_tolerance, ms2_tolerance):
-    ms1_recalibrated = data_struct.ppm_error.abs() <= ms1_tolerance
-    recalibrated = data_struct.ix[ms1_recalibrated].apply(
-        filter_tandem_matches_by_ppm, 1, args=(ms2_tolerance))
-    ion_coverage_score(recalibrated)
-    recalibrated.noise_filter = None
-    recalibrated.MS2_Score = None
-
-
 def filter_tandem_matches_by_ppm(row, ms2_tolerance):
     for ion_type in ["Oxonium_ions", "Stub_ions",
                      "b_ion_coverage", "b_ions_with_HexNAc",
@@ -578,23 +568,6 @@ class PredictionResultsIntactMassNoFragmentsPlugin(PredictionResultsPlugin):
         except:
             json_dict["intact_mass_no_fragments"] = []
 PredictionResults.plugins.append(PredictionResultsIntactMassNoFragmentsPlugin)
-
-
-class PredictionResultsSqlite(sqlitedict.SqliteDict):
-
-    def __init__(self, file_name, frame):
-        super(PredictionResultsSqlite, self).__init__(file_name)
-        self.column_to_type = frame.apply(pd.lib.infer_dtype, 0).to_dict()
-        for i, row in frame.iterrows():
-            self[i] = row.to_dict()
-
-    def __getitem__(self, key):
-        val = super(PredictionResultsSqlite, self).__getitem__(key)
-        return pd.Series(val)
-
-    def __iter__(self):
-        for i, row in self.items():
-            yield pd.Series(row)
 
 
 def convert_csv_to_nested(path):

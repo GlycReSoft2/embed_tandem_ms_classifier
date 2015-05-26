@@ -23,6 +23,7 @@ oxonium_ions = {
 
 
 class Glycan(object):
+    # __slots__ = ["composition", "mass", "glycan_identities", "data"]
 
     @staticmethod
     def glycan_composition_string(count_list):
@@ -56,6 +57,11 @@ class Glycan(object):
     def __ne__(self, other):
         comp_eq = any(i != j for i, j in zip(self.composition, other.composition))
         return comp_eq
+
+    # @property
+    # def __dict__(self):
+    #     return {n: getattr(self, n) for n in self.__slots__}
+
 
     @property
     def composition_dict(self):

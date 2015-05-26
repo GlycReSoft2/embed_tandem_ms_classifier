@@ -6,3 +6,4 @@
 *.so
 .ropeproject
 *.config
+test_data/

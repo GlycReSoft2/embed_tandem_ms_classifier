@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from . import PeptideSequenceBase, MoleculeBase
 from . import constants as structure_constants
 from .composition import Composition, composition_to_mass, std_ion_comp
-from .fragment import Fragment, fragment_pairing, fragment_direction
+from .fragment import Fragment, fragment_pairing, fragment_direction, fragment_shift
 from .modification import Modification
 from .residue import Residue
 
@@ -307,8 +307,8 @@ class Sequence(PeptideSequenceBase):
         return golden_pair_name
 
     def break_at(self, idx):
-        b_shift = Composition('H+').mass
-        y_shift = Composition('H2O').mass + Composition('H+').mass
+        b_shift = fragment_shift['b']
+        y_shift = fragment_shift['y']
 
         mod_b = defaultdict(int)
         mass_b = 0
@@ -362,11 +362,11 @@ class Sequence(PeptideSequenceBase):
         if kind == 'B' or kind == "b":
             seq_list = self.seq
             # Hydrogen ionized is from terminal modification
-            mass_shift = composition_to_mass('H+')
+            mass_shift = fragment_shift['b']
 
         elif kind == 'Y' or kind == "y":
             # y ions abstract a proton from the precursor
-            mass_shift = composition_to_mass('H2O') + composition_to_mass('H+')
+            mass_shift = fragment_shift['y']
             seq_list = list(reversed(self.seq))
 
         current_mass = 0
@@ -583,4 +583,3 @@ def sequence_tokens_to_mass(tokens):
     else:
         mass += Composition("OH").mass
     return mass
-

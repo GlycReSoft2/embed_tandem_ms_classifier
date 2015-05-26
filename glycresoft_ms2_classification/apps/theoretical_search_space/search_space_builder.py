@@ -357,7 +357,7 @@ def process_predicted_ms1_ion(row, modification_table, site_list_map, glycan_ide
         ms1_result.peptide_modifications, modification_table)
 
     # Get the start and end positions of fragment relative to the
-    glycan_sites = set(site_list_map[ms1_result.protein_id]).intersection(
+    glycan_sites = set(site_list_map.get(ms1_result.protein_id, [])).intersection(
         range(ms1_result.start_position, ms1_result.end_position + 1))
 
     # No recorded sites, skip this component.
