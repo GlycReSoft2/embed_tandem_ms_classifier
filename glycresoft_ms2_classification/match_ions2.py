@@ -527,7 +527,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     cntr = 0
     try:
         if n_processes > 1:
-            # logger.debug("Matching concurrently")
+            logger.debug("Matching concurrently")
             matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
                                                    chunksize=750)
             for matches, counter, annotater in matching_process:
@@ -550,13 +550,14 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                 combine_annotations(annotate_accumulator, annotater)
     except Exception, e:
         logger.error(exc_info=e)
+        raise e
 
     pool.close()
     pool.join()
     del pool
     if(cntr < 1):
         raise NoIonsMatchedException("No matches found from theoretical ions in MS2 deconvoluted results")
-
+    logger.info("Saving.")
     fragment_match_store.commit()
 
     if(split_decon_data):
