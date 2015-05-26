@@ -514,7 +514,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
         db = data.to_db()
         logger.info("Index built.")
     elif db is not None:
-        pass
+        data = []
 
     match_fn = match_observed_to_theoretical_sql
     if use_cython:
@@ -525,26 +525,29 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                                 observed_ions_conn_string=db.connection_string)
     # Index counter for sqlitedict
     cntr = 0
-    if n_processes > 1:
-        # logger.debug("Matching concurrently")
-        matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
-                                               chunksize=750)
-        for matches, counter, annotater in matching_process:
-            for m in matches:
-                fragment_match_store[cntr] = m
-                cntr += 1
-            did_match_counter += counter
-            combine_annotations(annotate_accumulator, annotater)
-    else:
-        logger.debug("Matching sequentially")
-        for theoretical in theoretical_fragments:
-            matches, counter, annotater = task_fn(theoretical)
-            # results.extend(matches)
-            for m in matches:
-                fragment_match_store[cntr] = m
-                cntr += 1
-            did_match_counter += counter
-            combine_annotations(annotate_accumulator, annotater)
+    try:
+        if n_processes > 1:
+            # logger.debug("Matching concurrently")
+            matching_process = pool.imap_unordered(task_fn, theoretical_fragments,
+                                                   chunksize=750)
+            for matches, counter, annotater in matching_process:
+                for m in matches:
+                    fragment_match_store[cntr] = m
+                    cntr += 1
+                did_match_counter += counter
+                combine_annotations(annotate_accumulator, annotater)
+        else:
+            logger.debug("Matching sequentially")
+            for theoretical in theoretical_fragments:
+                matches, counter, annotater = task_fn(theoretical)
+                # results.extend(matches)
+                for m in matches:
+                    fragment_match_store[cntr] = m
+                    cntr += 1
+                did_match_counter += counter
+                combine_annotations(annotate_accumulator, annotater)
+    except Exception, e:
+        logger.error(exc_info=e)
 
     pool.close()
     pool.join()
@@ -555,12 +558,15 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
     fragment_match_store.commit()
 
     if(split_decon_data):
-        logger.info("Splitting observed spectra between matched and unmatched")
-        match, no_match = split_decon_data_by_index(data, did_match_counter)
-        annotate_ions(match, annotate_accumulator)
-        save_split_decon_data(match, no_match,
-                              "{root}.{tag}".format(root=splitext(decon_data)[0],
-                                                    tag=tag))
+        try:
+            logger.info("Splitting observed spectra between matched and unmatched")
+            match, no_match = split_decon_data_by_index(data, did_match_counter)
+            annotate_ions(match, annotate_accumulator)
+            save_split_decon_data(match, no_match,
+                                  "{root}.{tag}".format(root=splitext(decon_data)[0],
+                                                        tag=tag))
+        except Exception, e:
+            logger.error(exc_info=e)
 
     return fragment_match_store.filename
 
