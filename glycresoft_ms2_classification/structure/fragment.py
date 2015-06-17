@@ -70,7 +70,7 @@ class Fragment(object):
     def __init__(self, frag_type, pos, mod_dict, mass, golden_pairs=None):
         if golden_pairs is None:
             golden_pairs = []
-        self.type = frag_type
+        self.type = frag_type[0].lower() + frag_type[1:]
         # The mass value is the bare backbone's mass
         self.bare_mass = mass
 

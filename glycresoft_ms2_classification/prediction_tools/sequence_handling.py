@@ -61,7 +61,7 @@ def percent_expected_ions_with_hexnac_observed(row):
 
 # Maps the coverage along the peptide backbone by matching ions
 # of the correct size to the backbone.
-def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
+def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=False):
     """Compute the per-ion type coverage for the current glycopeptide
     and integrate complementar ion ladders to compute the mean per residue
     coverage with and without HexNAc.
@@ -84,25 +84,25 @@ def compute_ion_coverage_map(glycopeptide_match, include_golden_pairs=True):
     b_ion_coverage = np.zeros(peptide_length)
     for b_ion in glycopeptide_match['b_ion_coverage']:
         ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'B(\d+)?:', b_ion['key'])[0]) - 1] = 1
+        ion[:int(re.findall(r'[Bb](\d+)?:', b_ion['key'])[0]) - 1] = 1
         b_ion_coverage += ion
 
     y_ion_coverage = np.zeros(peptide_length)
     for y_ion in glycopeptide_match['y_ion_coverage']:
         ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'Y(\d+)?:', y_ion['key'])[0]) - 1] = 1
+        ion[:int(re.findall(r'[Yy](\d+)?:', y_ion['key'])[0]) - 1] = 1
         y_ion_coverage += ion
 
     b_ions_with_HexNAc = np.zeros(peptide_length)
     for b_ion in glycopeptide_match['b_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'B(\d+)\+', b_ion['key'])[0]) - 1] = 1
+        ion[:int(re.findall(r'[Bb](\d+)\+', b_ion['key'])[0]) - 1] = 1
         b_ions_with_HexNAc += ion
 
     y_ions_with_HexNAc = np.zeros(peptide_length)
     for y_ion in glycopeptide_match['y_ions_with_HexNAc']:
         ion = np.zeros(peptide_length)
-        ion[:int(re.findall(r'Y(\d+)\+', y_ion['key'])[0]) - 1] = 1
+        ion[:int(re.findall(r'[Yy](\d+)\+', y_ion['key'])[0]) - 1] = 1
         y_ions_with_HexNAc += ion
 
     # Combine the b and y ion series to compute the total coverage

@@ -388,7 +388,8 @@ def label_formatter(label):
     if len(label) > 12:
         label = '\n'.join(
             s for s in re.split(r'([^\+-]+[\+-])', label) if len(s) != 0)
-
+    if label[0] in {'B', 'Y', 'C', 'Z'}:
+        label = label[0].lower() + label[1:]
     return label, label.count("\n")
 
 

@@ -4,7 +4,6 @@ from Queue import Empty as QueueEmptyException
 
 
 def _wrap_enqueue_payload(payload_fn, payload_param, out_queue):
-    sys.argv[0] = "glyc-async-loader"
     results = payload_fn(*payload_param)
     out_queue.put(results)
 

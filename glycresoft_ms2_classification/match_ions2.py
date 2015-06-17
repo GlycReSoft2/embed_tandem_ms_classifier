@@ -145,7 +145,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 if fabs(oxonium_ppm) <= ms2_tolerance:
                     oxoniums.append(
                         {"ion": (obs_ions.mass + Proton), "ppm_error": oxonium_ppm * 1e6,
-                         "key": kind, "scan_id": tandem_ms_ind})
+                         "key": kind, "scan_id": obs_ions.id})
                     annotate[obs_ions.id].append((theoretical_sequence, kind))
 
         # checking for b and y ions and ions with HexNAc:
@@ -160,10 +160,10 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     b_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     all_b_ions.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
         b_HexNAc_ions = theoretical['b_ions_with_HexNAc']
@@ -176,11 +176,11 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     b_HexNAc_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     all_b_ions.append(
                         {"obs_ion": (obs_ions.mass + Proton),
                          "key": theo_ions["key"].split("+")[0],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
         y_ions = list(theoretical['bare_y_ions'])
@@ -194,10 +194,10 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     y_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     all_y_ions.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
         y_HexNAc_ions = theoretical['y_ions_with_HexNAc']
@@ -210,11 +210,11 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     y_HexNAc_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     all_y_ions.append(
                         {"obs_ion": (obs_ions.mass + Proton),
                          "key": theo_ions["key"].split("+")[0],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
         # checking for stub ions
@@ -229,7 +229,7 @@ def match_observed_to_theoretical_sql(theoretical, observed_ions_conn_string, ms
                 if fabs(tandem_ppm) <= ms2_tolerance:
                     stub_type.append(
                         {"obs_ion": (obs_ions.mass + Proton), "key": theo_ions["key"],
-                         "ppm_error": tandem_ppm * 1e6, "scan_id": tandem_ms_ind})
+                         "ppm_error": tandem_ppm * 1e6, "scan_id": obs_ions.id})
                     annotate[obs_ions.id].append((theoretical_sequence, theo_ions["key"]))
 
     results.append({
@@ -534,7 +534,7 @@ def match_frags(db_file, decon_data, ms1_tolerance=ms1_tolerance_default,
                 for m in matches:
                     fragment_match_store[cntr] = m
                     cntr += 1
-                    if cntr % 1000 == 0:
+                    if cntr % 100 == 0:
                         logger.info("Matched %d precursors", cntr)
                 did_match_counter += counter
                 combine_annotations(annotate_accumulator, annotater)

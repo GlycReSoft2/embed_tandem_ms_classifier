@@ -301,7 +301,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key,
-                        tandem_ms_ind))
+                        real_tandem.id))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
 
@@ -323,7 +323,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key,
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
         all_b_ions.extend(b_type)
@@ -345,7 +345,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key,
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     all_b_ions.append(Match(
                         ppm * 1e6,
@@ -353,7 +353,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key.split("+")[0],
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
@@ -373,7 +373,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key,
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
@@ -394,7 +394,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key,
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     all_y_ions.append(Match(
                         ppm * 1e6,
@@ -402,7 +402,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key.split("+")[0],
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 
@@ -422,7 +422,7 @@ cdef list match_observed_to_theoretical(dict theoretical, list observed, double 
                         real_tandem.intensity,
                         real_tandem.charge,
                         theo_ion.key,
-                        tandem_ms_ind
+                        real_tandem.id
                     ))
                     annotate[real_tandem.id].append((theoretical_sequence, theo_ion.key))
 

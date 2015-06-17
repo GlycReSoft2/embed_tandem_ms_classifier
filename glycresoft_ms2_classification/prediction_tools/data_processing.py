@@ -145,7 +145,7 @@ def save_model_file(data_struct, path):
     return path + ".csv"
 
 
-def ion_coverage_score(data_struct, include_golden_pairs=True):
+def ion_coverage_score(data_struct, include_golden_pairs=False):
     coverage_data = data_struct.apply(compute_ion_coverage_map, 1, include_golden_pairs=include_golden_pairs)
     data_struct['meanCoverage'] = coverage_data["meanCoverage"]
     data_struct['percentUncovered'] = coverage_data["percentUncovered"]
