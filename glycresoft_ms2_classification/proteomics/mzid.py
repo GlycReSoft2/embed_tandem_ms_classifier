@@ -1,13 +1,12 @@
 import re
 import logging
 from pyteomics import mzid
-
 from ..structure import sequence
 from ..structure import modification
 from ..structure import residue
 
 from .proteome_components import ReferenceProtein, PeptideMatch, Proteome
-logging.basicConfig(level="DEBUG")
+
 logger = logging.getLogger("mzid")
 
 Sequence = sequence.Sequence
@@ -30,7 +29,7 @@ class Parser(MzIdentML):
                     del info[k]
                     info.pop('id', None)
                 except:
-                    logger.debug("%s not found", v)
+                    # logger.debug("%s not found", v)
                     info['skip'] = True
 
 
@@ -38,9 +37,9 @@ def extract_proteins(mzid_file):
     parser = Parser(mzid_file, retrieve_refs=True, iterative=False, build_id_cache=True)
     protein_iter = parser.iterfind("ProteinDetectionHypothesis", retrieve_refs=True, recursive=True, iterative=False)
     protein_index = Proteome({})
-    logger.debug("Begin iteration")
+    # logger.debug("Begin iteration")
     for protein_dict in protein_iter:
-        logger.debug("Hit Protein")
+        # logger.debug("Hit Protein")
         protein = handle_protein_hypothesis(protein_dict)
         protein_index[protein.accession] = protein
     return protein_index
@@ -48,7 +47,7 @@ def extract_proteins(mzid_file):
 
 def handle_protein_hypothesis(hypothesis_dict):
     protein = ReferenceProtein(hypothesis_dict)
-    logger.debug("Processing %s", protein.sequence)
+    # logger.debug("Processing %s", protein.sequence)
     protein.metadata.update({k: v for k, v in hypothesis_dict.items()
                              if k not in {"PeptideHypothesis"}})
     protein.peptides = [peptide
@@ -88,9 +87,9 @@ def convert_dict_to_sequence(sequence_dict, parent_protein):
         if found == -1:
             raise ValueError("Peptide not found in Protein")
         if found != start:
-            logger.debug(
-                "%r: %d <- %d, %s, %d", evidence["PeptideSequence"], found, start,
-                parent_protein.accession, parent_protein.sequence.count(base_sequence))
+            # logger.debug(
+            #     "%r: %d <- %d, %s, %d", evidence["PeptideSequence"], found, start,
+            #     parent_protein.accession, parent_protein.sequence.count(base_sequence))
             start = found
             end = start + len(base_sequence)
         is_decoy = evidence["isDecoy"]

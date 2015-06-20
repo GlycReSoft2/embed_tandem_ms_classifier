@@ -62,7 +62,6 @@ class Glycan(object):
     # def __dict__(self):
     #     return {n: getattr(self, n) for n in self.__slots__}
 
-
     @property
     def composition_dict(self):
         composition_dict = OrderedDict()
@@ -105,6 +104,7 @@ class Adduct(object):
 
 class GlycanHypothesis(list):
     def __init__(self, csv_path=None):
+        self.glycans = []
         if csv_path is not None:
             self.reader = csv.DictReader(open(csv_path))
             self.glycan_identities = self.get_glycan_identities(self.reader.fieldnames)
@@ -134,6 +134,7 @@ class GlycanHypothesis(list):
 
 class GlycanMS1Results(list):
     def __init__(self, csv_path=None):
+        self.glycans = []
         if csv_path is not None:
             self.reader = csv.DictReader(open(csv_path))
             self.glycan_identities = self.get_glycan_identities(self.reader.fieldnames)

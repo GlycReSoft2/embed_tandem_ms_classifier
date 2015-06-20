@@ -278,7 +278,7 @@ class Sequence(PeptideSequenceBase):
         for i, pos in enumerate(self):
             mods = [mod.name for mod in pos[1] if mod.name == "HexNAc" or "Glycan" in mod.name]
             for mod in mods:
-                seld.drop_modification(i, mod)
+                self.drop_modification(i, mod)
 
     def break_golden_pair(self, frag):
         if isinstance(frag, Fragment):
